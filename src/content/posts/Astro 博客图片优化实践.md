@@ -29,11 +29,10 @@ tags: ["前端", "Astro", "性能优化"]
 
 ​	自动转换高效图片格式
 
-```
----
+```astro
 import { Image } from 'astro:assets';
 import cover from '../public/images/post-cover.webp';
----
+
 <Image src={cover} alt="文章封面" width={800} height={400} loading="lazy" />
 ```
 

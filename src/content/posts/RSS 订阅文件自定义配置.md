@@ -18,8 +18,7 @@ Astro 自带简易 RSS 生成，但默认输出内容简陋，阅读器显示体
 
 在项目根目录新建 `src/pages/rss.xml.astro`，读取 posts 内容集合批量生成条目：
 
-```
----
+```astro
 import rss from '@astrojs/rss';
 import { getCollection } from 'astro:content';
 export async function GET(context) {
@@ -37,7 +36,6 @@ export async function GET(context) {
     })),
   });
 }
----
 ```
 
 ## 阅读器适配优化

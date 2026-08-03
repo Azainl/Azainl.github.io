@@ -109,6 +109,7 @@ const yearGroupReveal = (index: number) =>
   const prevBtn = nav.querySelector('[data-dir="prev"]') as HTMLAnchorElement;
   const nextBtn = nav.querySelector('[data-dir="next"]') as HTMLAnchorElement;
   const total = Number(nav.dataset.total);
+  let busy = false;
 
   function currentPage(): number {
     const raw = new URLSearchParams(window.location.search).get('page');
@@ -117,50 +118,88 @@ const yearGroupReveal = (index: number) =>
     return Math.min(total, Math.max(1, parsed));
   }
 
+  function setDisabled(el: HTMLAnchorElement, disabled: boolean) {
+    if (disabled) {
+      el.setAttribute('aria-disabled', 'true');
+      el.setAttribute('tabindex', '-1');
+    } else {
+      el.removeAttribute('aria-disabled');
+      el.removeAttribute('tabindex');
+    }
+  }
+
   function applyPage(page: number, animate: boolean): void {
+    if (busy) return;
+    // 边界收敛：始终落在 1..total 之间
+    const target = Math.min(total, Math.max(1, page));
+    const startHeight = archive.getBoundingClientRect().height;
+
     if (animate) archive.classList.add('paging');
-    window.setTimeout(
-      () => {
-        for (const row of rows) {
-          row.hidden = Number(row.dataset.page) !== page;
+    window.setTimeout(() => {
+      for (const row of rows) {
+        row.hidden = Number(row.dataset.page) !== target;
+      }
+      for (const el of numLinks) {
+        if (Number(el.dataset.page) === target) {
+          el.setAttribute('aria-current', 'page');
+        } else {
+          el.removeAttribute('aria-current');
         }
-        for (const el of numLinks) {
-          if (Number(el.dataset.page) === page) {
-            el.setAttribute('aria-current', 'page');
-          } else {
-            el.removeAttribute('aria-current');
-          }
-        }
-        prevBtn.toggleAttribute('aria-disabled', page === 1);
-        nextBtn.toggleAttribute('aria-disabled', page === total);
+      }
+      setDisabled(prevBtn, target === 1);
+      setDisabled(nextBtn, target === total);
 
-        const url = new URL(window.location.href);
-        if (page === 1) url.searchParams.delete('page');
-        else url.searchParams.set('page', String(page));
-        window.history.replaceState(null, '', url);
+      const url = new URL(window.location.href);
+      if (target === 1) url.searchParams.delete('page');
+      else url.searchParams.set('page', String(target));
+      window.history.replaceState(null, '', url);
 
-        if (animate) {
-          requestAnimationFrame(() => archive.classList.remove('paging'));
+      if (animate) {
+        busy = true;
+        // 内容高度变化时，让页脚平滑跟随（FLIP 高度过渡）
+        const endHeight = archive.getBoundingClientRect().height;
+        if (endHeight !== startHeight) {
+          archive.style.height = `${startHeight}px`;
+          archive.style.overflow = 'hidden';
+          void archive.offsetHeight;
+          archive.style.height = `${endHeight}px`;
         }
-      },
-      animate ? 180 : 0,
-    );
+        const cleanup = () => {
+          archive.style.height = '';
+          archive.style.overflow = '';
+          archive.removeEventListener('transitionend', cleanup);
+          busy = false;
+        };
+        archive.addEventListener('transitionend', (event) => {
+          if ((event as TransitionEvent).propertyName === 'height') cleanup();
+        });
+        requestAnimationFrame(() => archive.classList.remove('paging'));
+        // 兜底超时，防止 transitionend 丢失导致按钮卡住
+        window.setTimeout(cleanup, 500);
+      }
+    }, animate ? 180 : 0);
   }
 
   nav.hidden = false;
   for (const el of numLinks) {
     el.addEventListener('click', (event) => {
       event.preventDefault();
-      applyPage(Number(el.dataset.page), true);
+      if (!el.hasAttribute('aria-disabled')) {
+        applyPage(Number(el.dataset.page), true);
+      }
     });
   }
   prevBtn.addEventListener('click', (event) => {
     event.preventDefault();
-    applyPage(currentPage() - 1, true);
+    if (!prevBtn.hasAttribute('aria-disabled')) {
+      applyPage(currentPage() - 1, true);
+    }
   });
   nextBtn.addEventListener('click', (event) => {
     event.preventDefault();
-    applyPage(currentPage() + 1, true);
+    if (!nextBtn.hasAttribute('aria-disabled')) {
+      applyPage(currentPage() + 1, true);
+    }
   });
   applyPage(currentPage(), false);
 </script>

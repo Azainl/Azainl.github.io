@@ -544,7 +544,8 @@ a {
 
 /* 首页翻页 */
 .archive {
-  transition: opacity 0.22s ease, transform 0.22s ease;
+  transition: opacity 0.22s ease, transform 0.22s ease,
+    height 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .archive.paging {

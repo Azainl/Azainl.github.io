@@ -195,6 +195,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => {
     const tags = [...document.querySelectorAll('.post-row .tag')];
     const cs = tags.length ? getComputedStyle(tags[0]) : null;
+    const page1Count = document.querySelectorAll('.post-row[data-page="1"]').length;
     return {
       nested: document.querySelectorAll('.post-row a a').length,
       tagCount: tags.length,
@@ -203,87 +204,157 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       height: tags[0] ? Math.round(tags[0].getBoundingClientRect().height) : 0,
       visibleRows: [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length,
       navVisible: document.getElementById('pagination').hidden === false,
+      page1Count,
     };
   })()`);
   check(`${label}: 无嵌套链接`, r.nested === 0, `${r.nested} 个`);
   check(`${label}: 标签数量`, r.tagCount >= 8, `${r.tagCount} 个`);
   check(`${label}: 标签字号统一`, r.fontSize === '13px', r.fontSize);
   check(`${label}: 标签高度正常`, r.padTop === '2.4px' && r.height < 30, `pad=${r.padTop} h=${r.height}`);
-  check(`${label}: 首页第 1 页文章数`, r.visibleRows === 4, `${r.visibleRows} 篇`);
+  check(`${label}: 首页第 1 页文章数`, r.visibleRows === r.page1Count && r.page1Count > 0, `${r.visibleRows} 篇`);
   check(`${label}: 翻页控件显示`, r.navVisible);
 }, '首页标签与翻页');
 
 await runPage(`${BASE}/?page=2`, async (cdp, label) => {
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
   const r = await evaluate(cdp, `(() => {
-    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    const total = Number(document.getElementById('pagination').dataset.total);
+    const page2Count = document.querySelectorAll('.post-row[data-page="2"]').length;
+    const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
     const active = document.querySelector('.page-number[aria-current="page"]');
     const prev = document.querySelector('[data-dir="prev"]');
+    const next = document.querySelector('[data-dir="next"]');
     return {
-      visibleRows: rows.length,
+      total,
+      page2Count,
+      visible,
       activePage: active?.dataset.page || '',
       prevDisabled: prev.hasAttribute('aria-disabled'),
+      nextDisabled: next.hasAttribute('aria-disabled'),
       url: location.search,
     };
   })()`);
-  check(`${label}: 第 2 页文章数`, r.visibleRows === 1, `${r.visibleRows} 篇`);
+  check(`${label}: 第 2 页文章数`, r.visible === r.page2Count && r.page2Count > 0, `共 ${r.total} 页，第 2 页 ${r.visible} 篇`);
   check(`${label}: 当前页码高亮`, r.activePage === '2', r.activePage);
   check(`${label}: 上一页可用`, r.prevDisabled === false);
+  check(`${label}: 下一页可用`, r.nextDisabled === false);
   check(`${label}: URL 页码`, r.url === '?page=2', r.url);
 }, '首页翻页-第2页');
 
-await runPage(`${BASE}/?page=9`, async (cdp, label) => {
+await runPage(`${BASE}/?page=999`, async (cdp, label) => {
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
   const r = await evaluate(cdp, `(() => {
-    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    const total = Number(document.getElementById('pagination').dataset.total);
+    const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
     const active = document.querySelector('.page-number[aria-current="page"]');
     const next = document.querySelector('[data-dir="next"]');
     return {
-      visibleRows: rows.length,
+      total,
+      visible,
       activePage: active?.dataset.page || '',
       nextDisabled: next.hasAttribute('aria-disabled'),
       url: location.search,
     };
   })()`);
-  check(`${label}: 越界回退到末页`, r.visibleRows === 1 && r.activePage === '2', `${r.visibleRows} 篇`);
+  check(`${label}: 越界回退到末页`, r.activePage === String(r.total) && r.visible > 0, `末页=${r.activePage} 篇数=${r.visible}`);
   check(`${label}: 下一页禁用`, r.nextDisabled);
+  check(`${label}: URL 收敛`, r.url === `?page=${r.total}`, r.url);
 }, '首页翻页-越界');
 
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
+    const page2Count = document.querySelectorAll('.post-row[data-page="2"]').length;
     document.querySelector('.page-number[data-page="2"]').click();
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 400));
     const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
     return {
       visibleRows: rows.length,
+      page2Count,
       url: location.search,
       paging: document.querySelector('.archive').classList.contains('paging'),
     };
   })()`);
-  check(`${label}: 点击翻页`, r.visibleRows === 1 && r.url === '?page=2', `${r.visibleRows} 篇`);
+  check(`${label}: 点击翻页`, r.visibleRows === r.page2Count && r.page2Count > 0, `${r.visibleRows} 篇`);
   check(`${label}: 动画结束恢复`, r.paging === false);
 }, '首页翻页-点击');
+
+await runPage(`${BASE}/?page=1`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 300))`);
+  const r = await evaluate(cdp, `(async () => {
+    const prev = document.querySelector('[data-dir="prev"]');
+    const page1Count = document.querySelectorAll('.post-row[data-page="1"]').length;
+    prev.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    return {
+      visibleRows: rows.length,
+      page1Count,
+      url: location.search,
+      prevDisabled: prev.getAttribute('aria-disabled'),
+      tabindex: prev.getAttribute('tabindex'),
+    };
+  })()`);
+  check(
+    `${label}: 首页点上一页不越界`,
+    r.visibleRows === r.page1Count && r.page1Count > 0 && r.url === '',
+    `${r.visibleRows} 篇 url=${r.url}`,
+  );
+  check(
+    `${label}: 上一页正确禁用`,
+    r.prevDisabled === 'true' && r.tabindex === '-1',
+    `disabled=${r.prevDisabled} tabindex=${r.tabindex}`,
+  );
+}, '翻页边界-首页');
+
+await runPage(`${BASE}/?page=999`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
+  const r = await evaluate(cdp, `(async () => {
+    const next = document.querySelector('[data-dir="next"]');
+    const total = Number(document.getElementById('pagination').dataset.total);
+    const lastCount = document.querySelectorAll('.post-row[data-page="' + total + '"]').length;
+    next.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    return {
+      visibleRows: rows.length,
+      lastCount,
+      total,
+      nextDisabled: next.getAttribute('aria-disabled'),
+    };
+  })()`);
+  check(
+    `${label}: 末页点下一页不越界`,
+    r.visibleRows === r.lastCount && r.lastCount > 0,
+    `末页=${r.total} 篇数=${r.visibleRows}`,
+  );
+  check(
+    `${label}: 下一页正确禁用`,
+    r.nextDisabled === 'true',
+    `disabled=${r.nextDisabled}`,
+  );
+}, '翻页边界-末页');
 
 // 标签页与搜索页
 await runPage(`${BASE}/tags/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     tags: document.querySelectorAll('.tag-cloud .tag').length,
     counts: [...document.querySelectorAll('.tag-cloud .count')].map((e) => e.textContent),
-    sizeMap: Object.fromEntries(
-      [...document.querySelectorAll('.tag-cloud .tag')].map((a) => [
-        a.getAttribute('href'),
-        a.className,
-      ]),
-    ),
+    badSizes: [...document.querySelectorAll('.tag-cloud .tag')]
+      .filter((a) => {
+        const count = Number(a.querySelector('.count')?.textContent || 0);
+        const size = Number(a.className.match(/tag-size-([0-9])/)?.[1]);
+        return size !== Math.min(4, count);
+      })
+      .map(
+        (a) =>
+          a.textContent +
+          '=>size-' +
+          (a.className.match(/tag-size-([0-9])/)?.[1] || ''),
+      ),
   }))()`);
   check(`${label}: 标签云渲染`, r.tags >= 8, `${r.tags} 个标签`);
   check(`${label}: 标签带数量`, r.counts.every((c) => /^\d+$/.test(c)), r.counts.join(','));
-  check(
-    `${label}: 分级按文章数`,
-    r.sizeMap['/tags/随笔/']?.includes('tag-size-2') &&
-      r.sizeMap['/tags/思考/']?.includes('tag-size-1'),
-    JSON.stringify(r.sizeMap),
-  );
+  check(`${label}: 分级与文章数一致`, r.badSizes.length === 0, r.badSizes.join(','));
 }, '标签总览');
 
 await runPage(`${BASE}/`, async (cdp, label) => {
