@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="#f7f7f4"/>
   <path d="M690 110a220 220 0 1 0 176 352 240 240 0 0 1-176-352z" fill="#d93a1e"/>
-  <text x="80" y="330" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="68" font-weight="700" fill="#1a1a1e">山月 · 个人博客</text>
+  <text x="80" y="330" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="68" font-weight="700" fill="#1a1a1e">Azain · 个人博客</text>
   <text x="84" y="410" font-family="Georgia,serif" font-size="34" font-style="italic" fill="#55555e">notes on code, reading &amp; life</text>
 </svg>
