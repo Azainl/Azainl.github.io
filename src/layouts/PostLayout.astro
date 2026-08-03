@@ -1,0 +1,69 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import type { CollectionEntry } from 'astro:content';
+import { SITE } from '../consts';
+import { formatDate } from '../utils/formatDate';
+import { readingTime } from '../utils/readingTime';
+
+interface Props {
+  post: CollectionEntry<'posts'>;
+  prev?: CollectionEntry<'posts'> | null;
+  next?: CollectionEntry<'posts'> | null;
+}
+
+const { post, prev, next } = Astro.props;
+const { Content } = await post.render();
+const minutes = readingTime(post.body);
+const pageTitle = `${post.data.title} · ${SITE.name}`;
+---
+
+<BaseLayout title={pageTitle} description={post.data.description}>
+  <article class="post">
+    <header class="post-header">
+      <p class="post-meta">
+        <time datetime={post.data.date.toISOString()}>
+          {formatDate(post.data.date)}
+        </time>
+        <span class="dot" aria-hidden="true">·</span>
+        <span>{minutes} 分钟阅读</span>
+      </p>
+      <h1 class="post-title">{post.data.title}</h1>
+      <p class="post-lead">{post.data.description}</p>
+      {
+        post.data.tags.length > 0 && (
+          <ul class="tag-list">
+            {post.data.tags.map((tag) => (
+              <li>
+                <a class="tag" href={`/tags/${tag}/`}>#{tag}</a>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </header>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    <footer class="post-footer">
+      {
+        next && (
+          <p>
+            <span class="back">下一篇</span> ·{' '}
+            <a href={`/posts/${next.slug}/`}>{next.data.title}</a>
+          </p>
+        )
+      }
+      {
+        prev && (
+          <p>
+            <span class="back">上一篇</span> ·{' '}
+            <a href={`/posts/${prev.slug}/`}>{prev.data.title}</a>
+          </p>
+        )
+      }
+      <a class="back" href="/">← 返回首页</a>
+    </footer>
+  </article>
+</BaseLayout>

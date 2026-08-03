@@ -1,0 +1,38 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import { SITE } from '../../consts';
+
+const posts = await getCollection('posts', ({ data }) => !data.draft);
+const counts = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) {
+    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+}
+const tags = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+---
+
+<BaseLayout
+  title={`标签 · ${SITE.name}`}
+  description="按标签浏览全部文章。"
+>
+  <div class="page-head">
+    <h1>标签</h1>
+    <p>共 {tags.length} 个标签，{posts.length} 篇文章。</p>
+  </div>
+
+  <div class="container" style="padding-bottom: 5rem">
+    <ul class="tag-cloud">
+      {
+        tags.map(([tag, count]) => (
+          <li>
+            <a class="tag" href={`/tags/${tag}/`}>
+              #{tag}<span class="count">{count}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</BaseLayout>

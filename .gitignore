@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.astro/
+.npm-cache/
+.shots/
+.chrome-tmp/
+.chrome-tmp2/
+*.log
+.DS_Store

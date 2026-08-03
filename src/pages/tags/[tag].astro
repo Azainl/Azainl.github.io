@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import { SITE } from '../../consts';
+import { formatDateShort } from '../../utils/formatDate';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) => !data.draft);
+  const tags = new Set(posts.flatMap((post) => post.data.tags));
+  return [...tags].map((tag) => ({ params: { tag } }));
+}
+
+const { tag } = Astro.params;
+const posts = (
+  await getCollection('posts', ({ data }) => !data.draft && data.tags.includes(tag!))
+).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+---
+
+<BaseLayout
+  title={`#${tag} · ${SITE.name}`}
+  description={`标签「${tag}」下的全部文章。`}
+>
+  <div class="page-head">
+    <p class="post-meta">标签</p>
+    <h1>#{tag}</h1>
+    <p>共 {posts.length} 篇文章。</p>
+  </div>
+
+  <section class="archive" style="padding-top: 0">
+    <ol class="post-list">
+      {
+        posts.map((post) => (
+          <li class="post-row">
+            <a href={`/posts/${post.slug}/`}>
+              <time datetime={post.data.date.toISOString()}>
+                {formatDateShort(post.data.date)}
+              </time>
+              <div>
+                <h3>{post.data.title}</h3>
+                <p>{post.data.description}</p>
+              </div>
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+</BaseLayout>

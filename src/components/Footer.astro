@@ -1,0 +1,23 @@
+---
+import { SITE } from '../consts';
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <p class="footer-copy">
+      © {year} {SITE.name} · 用 Astro 构建
+    </p>
+    <div class="footer-links">
+      <a href="/rss.xml">RSS 订阅</a>
+      <a
+        class="icon-link"
+        href="/rss.xml"
+        aria-label="RSS 订阅"
+        title="RSS 订阅"
+      >
+        <i class="ph ph-rss-simple" aria-hidden="true"></i>
+      </a>
+    </div>
+  </div>
+</footer>

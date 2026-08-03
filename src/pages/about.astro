@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../consts';
+---
+
+<BaseLayout
+  title={`关于 · ${SITE.name}`}
+  description="关于这个博客与它的作者。"
+>
+  <div class="page-head">
+    <h1>关于</h1>
+    <p>关于这个博客，以及写下这些文字的人。</p>
+  </div>
+
+  <div class="container prose" style="padding-bottom: 5rem">
+    <p>
+      你好，我是{SITE.author}。这里是我的个人博客，用来放一些
+      写代码、读书和生活时冒出来的想法。
+    </p>
+
+    <p>
+      博客于 2026 年夏天上线。技术选型、搭建过程都记录在
+      <a href="/posts/blog-build-notes/">这篇文章</a>里。
+      本站没有评论系统、没有广告，也没有统计脚本，只有按时间排列的文章。
+      如果你读到了什么，欢迎写信给我。
+    </p>
+
+    <h2>联系我</h2>
+    <p>
+      邮件：<code>{SITE.email}</code>
+      （示例邮箱，上线前记得替换成真实地址）
+    </p>
+
+    <h2>订阅</h2>
+    <p>
+      可以订阅 <a href="/rss.xml">RSS</a>，有新文章时会第一时间同步。
+    </p>
+  </div>
+</BaseLayout>
