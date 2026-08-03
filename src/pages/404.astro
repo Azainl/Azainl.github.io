@@ -1,8 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../consts';
 ---
 
-<BaseLayout title="页面不存在 · 山月" description="你要找的页面不存在。">
+<BaseLayout title={`页面不存在 · ${SITE.name}`} description="你要找的页面不存在。">
   <div class="not-found">
     <code>404 NOT_FOUND</code>
     <h1>页面走丢了</h1>

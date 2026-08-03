@@ -3,6 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import { SITE } from '../../consts';
 import { formatDateShort } from '../../utils/formatDate';
+import { tagDescription } from '../../data/tags';
 
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => !data.draft);
@@ -23,7 +24,7 @@ const posts = (
   <div class="page-head">
     <p class="post-meta">标签</p>
     <h1>#{tag}</h1>
-    <p>共 {posts.length} 篇文章。</p>
+    <p>{tagDescription(tag!)} · 共 {posts.length} 篇文章</p>
   </div>
 
   <section class="archive" style="padding-top: 0">
@@ -38,11 +39,30 @@ const posts = (
               <div>
                 <h3>{post.data.title}</h3>
                 <p>{post.data.description}</p>
+                {
+                  post.data.tags.length > 0 && (
+                    <ul class="tag-list">
+                      {post.data.tags.map((t) => (
+                        <li>
+                          <a
+                            class={`tag${t === tag ? ' tag-current' : ''}`}
+                            href={`/tags/${t}/`}
+                          >
+                            #{t}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                }
               </div>
             </a>
           </li>
         ))
       }
     </ol>
+    <p class="back-row">
+      <a class="back-link" href="/tags/">← 全部标签</a>
+    </p>
   </section>
 </BaseLayout>

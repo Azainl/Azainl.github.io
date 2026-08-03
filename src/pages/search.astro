@@ -1,0 +1,236 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../consts';
+---
+
+<BaseLayout
+  title={`搜索 · ${SITE.name}`}
+  description="在全部文章中检索标题、标签、摘要和正文。"
+>
+  <div class="search-page">
+    <div class="page-head" style="padding: 0 0 1.5rem">
+      <h1>搜索</h1>
+      <p>输入关键词，检索标题、标签、摘要和正文。</p>
+    </div>
+
+    <div class="search-box">
+      <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+      <input
+        id="search-input"
+        class="search-input"
+        type="text"
+        placeholder="搜索关键词……"
+        autocomplete="off"
+        aria-label="搜索关键词"
+      />
+      <button id="search-clear" class="search-clear" type="button" aria-label="清空搜索">
+        <i class="ph ph-x" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <p id="search-meta" class="search-meta" hidden></p>
+    <div id="search-empty" class="search-empty" hidden>
+      <p>输入关键词开始搜索，例如「PowerShell」「Astro」「阅读」。</p>
+    </div>
+    <div id="search-none" class="search-none" hidden>
+      <p>没有找到相关文章，换个关键词试试？</p>
+    </div>
+    <ol id="search-results" class="post-list" hidden></ol>
+  </div>
+</BaseLayout>
+
+<script>
+  const input = document.getElementById('search-input') as HTMLInputElement;
+  const clearBtn = document.getElementById('search-clear') as HTMLButtonElement;
+  const meta = document.getElementById('search-meta') as HTMLElement;
+  const empty = document.getElementById('search-empty') as HTMLElement;
+  const none = document.getElementById('search-none') as HTMLElement;
+  const results = document.getElementById('search-results') as HTMLOListElement;
+
+  interface PostIndex {
+    slug: string;
+    title: string;
+    description: string;
+    date: string;
+    tags: string[];
+    content: string;
+  }
+
+  let index: PostIndex[] = [];
+
+  function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /** 把匹配到的关键词包进 <mark>，其余部分作为文本节点，避免 HTML 注入 */
+  function highlight(node: HTMLElement, text: string, query: string): void {
+    const re = new RegExp(`(${escapeRegExp(query)})`, 'ig');
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) {
+        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      }
+      const mark = document.createElement('mark');
+      mark.textContent = m[0];
+      frag.appendChild(mark);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(last)));
+    }
+    node.replaceChildren(frag);
+  }
+
+  function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+  }
+
+  function snippet(content: string, query: string): string {
+    const i = content.toLowerCase().indexOf(query.toLowerCase());
+    if (i < 0) return '';
+    const start = Math.max(0, i - 40);
+    const end = Math.min(content.length, i + query.length + 60);
+    return (
+      (start > 0 ? '…' : '') +
+      content.slice(start, end).trim() +
+      (end < content.length ? '…' : '')
+    );
+  }
+
+  function search(query: string) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const scored: { post: PostIndex; rank: number; contentHit: boolean }[] = [];
+    for (const post of index) {
+      const titleHit = post.title.toLowerCase().includes(q);
+      const descHit = post.description.toLowerCase().includes(q);
+      const tagHit = post.tags.join(' ').toLowerCase().includes(q);
+      const contentHit = post.content.toLowerCase().includes(q);
+      if (!titleHit && !descHit && !tagHit && !contentHit) continue;
+      let rank = 1;
+      if (titleHit) rank += 4;
+      else if (descHit) rank += 3;
+      else if (tagHit) rank += 2;
+      scored.push({ post, rank, contentHit });
+    }
+    scored.sort(
+      (a, b) => b.rank - a.rank || b.post.date.localeCompare(a.post.date),
+    );
+    return scored;
+  }
+
+  function render(items: ReturnType<typeof search>, query: string) {
+    results.replaceChildren();
+    for (const { post, contentHit } of items) {
+      const li = document.createElement('li');
+      li.className = 'post-row search-result-row';
+
+      const link = document.createElement('a');
+      link.href = `/posts/${post.slug}/`;
+
+      const time = document.createElement('time');
+      time.dateTime = post.date;
+      time.textContent = formatDate(post.date);
+
+      const body = document.createElement('div');
+      const h3 = document.createElement('h3');
+      highlight(h3, post.title, query);
+
+      const desc = document.createElement('p');
+      highlight(desc, post.description, query);
+
+      if (contentHit) {
+        const snip = document.createElement('p');
+        snip.className = 'search-snippet';
+        snip.textContent = snippet(post.content, query);
+        body.append(h3, desc, snip);
+      } else {
+        body.append(h3, desc);
+      }
+
+      const tags = document.createElement('ul');
+      tags.className = 'tag-list';
+      for (const tag of post.tags) {
+        const item = document.createElement('li');
+        const tagLink = document.createElement('a');
+        tagLink.className = 'tag';
+        tagLink.href = `/tags/${tag}/`;
+        tagLink.textContent = `#${tag}`;
+        item.appendChild(tagLink);
+        tags.appendChild(item);
+      }
+      body.appendChild(tags);
+
+      link.append(time, body);
+      li.appendChild(link);
+      results.appendChild(li);
+    }
+  }
+
+  function updateUrl(query: string) {
+    const url = new URL(window.location.href);
+    if (query) url.searchParams.set('q', query);
+    else url.searchParams.delete('q');
+    window.history.replaceState(null, '', url);
+  }
+
+  function run() {
+    const q = input.value.trim();
+    updateUrl(q);
+    clearBtn.classList.toggle('visible', q.length > 0);
+    if (!q) {
+      meta.hidden = true;
+      results.hidden = true;
+      none.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+    const items = search(q);
+    empty.hidden = true;
+    if (items.length === 0) {
+      meta.hidden = true;
+      results.hidden = true;
+      none.hidden = false;
+      return;
+    }
+    none.hidden = true;
+    meta.hidden = false;
+    meta.textContent = `找到 ${items.length} 篇文章`;
+    render(items, q);
+    results.hidden = false;
+  }
+
+  let timer: number | undefined;
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(run, 120);
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      input.value = '';
+      run();
+      input.focus();
+    }
+  });
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    run();
+    input.focus();
+  });
+
+  fetch('/search.json')
+    .then((res) => (res.ok ? res.json() : []))
+    .then((data: PostIndex[]) => {
+      index = data;
+      const initial = new URLSearchParams(window.location.search).get('q') ?? '';
+      if (initial) {
+        input.value = initial;
+        run();
+      } else {
+        empty.hidden = false;
+      }
+    });
+</script>

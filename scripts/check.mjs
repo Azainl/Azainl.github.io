@@ -28,7 +28,7 @@ async function waitForDebugger() {
   throw new Error('Chrome DevTools 端口未就绪');
 }
 
-function connect(wsUrl) {
+function connect(wsUrl, onEvent) {
   const ws = new WebSocket(wsUrl);
   let id = 0;
   const pending = new Map();
@@ -38,6 +38,8 @@ function connect(wsUrl) {
       const { resolve, reject } = pending.get(msg.id);
       pending.delete(msg.id);
       msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
+    } else if (onEvent && msg.method) {
+      onEvent(msg);
     }
   };
   const send = (method, params = {}) =>
@@ -74,9 +76,22 @@ async function runPage(url, fn, label, { dark = false, width = 1440, height = 10
     { method: 'PUT' },
   );
   const tab = await tabRes.json();
-  const cdp = connect(tab.webSocketDebuggerUrl);
+  const errors = [];
+  const cdp = connect(tab.webSocketDebuggerUrl, (msg) => {
+    if (msg.method === 'Runtime.exceptionThrown') {
+      errors.push(msg.params.exceptionDetails?.text || 'exception');
+    }
+    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
+      errors.push(
+        (msg.params.args || [])
+          .map((a) => a.value ?? a.description ?? '')
+          .join(' '),
+      );
+    }
+  });
   await cdp.ready;
   await cdp.send('Page.enable');
+  await cdp.send('Runtime.enable');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width,
     height,
@@ -99,6 +114,7 @@ async function runPage(url, fn, label, { dark = false, width = 1440, height = 10
   } catch (e) {
     check(`${label}: 脚本异常`, false, e.message);
   }
+  check(`${label}: 无控制台错误`, errors.length === 0, errors.join(' | '));
   cdp.ws.close();
   await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
 }
@@ -174,6 +190,92 @@ await runPage(`${BASE}/`, async (cdp, label) => {
 }, '主题切换', { dark: true });
 await runPage(`${BASE}/`, (cdp, label) => baseChecks(cdp, label), '首页-移动端', { width: 390, height: 844 });
 
+// 标签页与搜索页
+await runPage(`${BASE}/tags/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    tags: document.querySelectorAll('.tag-cloud .tag').length,
+    counts: [...document.querySelectorAll('.tag-cloud .count')].map((e) => e.textContent),
+    sizes: [...document.querySelectorAll('.tag-cloud .tag')].map((e) => e.className),
+  }))()`);
+  check(`${label}: 标签云渲染`, r.tags >= 8, `${r.tags} 个标签`);
+  check(`${label}: 标签带数量`, r.counts.every((c) => /^\d+$/.test(c)), r.counts.join(','));
+  check(`${label}: 标签分级样式`, r.sizes.some((s) => s.includes('tag-size-')), r.sizes.join(','));
+}, '标签总览');
+
+await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    h1: document.querySelector('h1')?.textContent.trim(),
+    rows: document.querySelectorAll('.post-row').length,
+    desc: document.querySelector('.page-head p:last-child')?.textContent || '',
+    back: [...document.querySelectorAll('a')].some((a) => a.textContent.includes('全部标签')),
+    current: document.querySelectorAll('.tag-current').length,
+  }))()`);
+  check(`${label}: 标题`, r.h1 === '#随笔', r.h1);
+  check(`${label}: 文章列表`, r.rows >= 2, `${r.rows} 篇`);
+  check(`${label}: 标签描述`, r.desc.length > 0, r.desc);
+  check(`${label}: 返回链接`, r.back);
+  check(`${label}: 当前标签高亮`, r.current >= 1, `${r.current} 个`);
+}, '标签详情');
+
+await runPage(`${BASE}/no-such-page/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    title: document.title,
+    h1: document.querySelector('h1')?.textContent.trim(),
+  }))()`);
+  check(`${label}: 标题包含站点名`, r.title.includes('Azain'), r.title);
+  check(`${label}: 404 文案`, r.h1 === '页面走丢了', r.h1);
+}, '404页');
+
+await runPage(`${BASE}/search/`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 900))`);
+  const emptyShown = await evaluate(
+    cdp,
+    `document.getElementById('search-empty').hidden === false`,
+  );
+  check(`${label}: 初始空状态`, emptyShown);
+
+  const r = await evaluate(cdp, `(async () => {
+    const input = document.getElementById('search-input');
+    input.value = 'PowerShell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 600));
+    const rows = document.querySelectorAll('#search-results .post-row');
+    return {
+      count: rows.length,
+      meta: document.getElementById('search-meta').textContent,
+      marks: document.querySelectorAll('#search-results mark').length,
+      firstTitle: rows[0]?.querySelector('h3')?.textContent || '',
+      snippet: rows[0]?.querySelector('.search-snippet')?.textContent || '',
+    };
+  })()`);
+  check(`${label}: 搜索命中`, r.count >= 1, `${r.count} 条`);
+  check(`${label}: 结果显示标题`, r.firstTitle.length > 0, r.firstTitle);
+  check(`${label}: 关键词高亮`, r.marks >= 1, `${r.marks} 个 mark`);
+  check(`${label}: 正文片段`, r.snippet.length > 0, r.snippet.slice(0, 24));
+
+  const nr = await evaluate(cdp, `(async () => {
+    const input = document.getElementById('search-input');
+    input.value = '完全不存在的关键词xyz';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 600));
+    return {
+      noneShown: document.getElementById('search-none').hidden === false,
+      resultsHidden: document.getElementById('search-results').hidden === true,
+    };
+  })()`);
+  check(`${label}: 无结果提示`, nr.noneShown && nr.resultsHidden);
+}, '搜索页');
+
+await runPage(`${BASE}/search/?q=阅读`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 900))`);
+  const r = await evaluate(cdp, `(() => ({
+    value: document.getElementById('search-input').value,
+    count: document.querySelectorAll('#search-results .post-row').length,
+  }))()`);
+  check(`${label}: 参数预填充`, r.value === '阅读', r.value);
+  check(`${label}: 自动检索`, r.count >= 1, `${r.count} 条`);
+}, '搜索-URL参数');
+
 // 全站内部链接检查
 const linksRes = await fetch(`http://127.0.0.1:${PORT}/json/new?${encodeURIComponent(`${BASE}/`)}`, { method: 'PUT' });
 const linksTab = await linksRes.json();
@@ -210,6 +312,18 @@ check('RSS 包含文章', rssText.includes('<item>'), `${(rssText.match(/<item>/
 
 const sitemapRes = await fetch(`${BASE}/sitemap-index.xml`);
 check('站点地图存在', sitemapRes.ok);
+
+const searchJsonRes = await fetch(`${BASE}/search.json`);
+check('搜索索引返回 200', searchJsonRes.ok);
+if (searchJsonRes.ok) {
+  const searchIndex = await searchJsonRes.json();
+  check('搜索索引包含文章', searchIndex.length >= 5, `${searchIndex.length} 篇`);
+  check(
+    '搜索索引含正文文本',
+    searchIndex.every((p) => p.content.length > 50),
+    searchIndex.map((p) => p.content.length).join(','),
+  );
+}
 
 console.log(results.join('\n'));
 chrome.kill();

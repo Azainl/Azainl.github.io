@@ -50,7 +50,7 @@ const years = [...byYear.entries()];
                           <ul class="tag-list">
                             {post.data.tags.map((tag) => (
                               <li>
-                                <span class="tag">#{tag}</span>
+                                <a class="tag" href={`/tags/${tag}/`}>#{tag}</a>
                               </li>
                             ))}
                           </ul>

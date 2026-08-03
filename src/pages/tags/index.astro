@@ -10,7 +10,10 @@ for (const post of posts) {
     counts.set(tag, (counts.get(tag) ?? 0) + 1);
   }
 }
-const tags = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+const tags = [...counts.entries()].sort(
+  (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh'),
+);
+const maxCount = Math.max(1, ...counts.values());
 ---
 
 <BaseLayout
@@ -19,19 +22,22 @@ const tags = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 >
   <div class="page-head">
     <h1>标签</h1>
-    <p>共 {tags.length} 个标签，{posts.length} 篇文章。</p>
+    <p>共 {posts.length} 篇文章，分布在 {tags.length} 个标签下。</p>
   </div>
 
   <div class="container" style="padding-bottom: 5rem">
     <ul class="tag-cloud">
       {
-        tags.map(([tag, count]) => (
-          <li>
-            <a class="tag" href={`/tags/${tag}/`}>
-              #{tag}<span class="count">{count}</span>
-            </a>
-          </li>
-        ))
+        tags.map(([tag, count]) => {
+          const size = Math.min(4, Math.max(1, Math.round((count / maxCount) * 4)));
+          return (
+            <li>
+              <a class={`tag tag-size-${size}`} href={`/tags/${tag}/`}>
+                #{tag}<span class="count">{count}</span>
+              </a>
+            </li>
+          );
+        })
       }
     </ul>
   </div>
