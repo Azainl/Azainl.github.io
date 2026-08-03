@@ -97,6 +97,10 @@ a {
   border-radius: 3px;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .accent {
   color: var(--accent);
 }
@@ -166,10 +170,191 @@ a {
   font-weight: 600;
 }
 
+.site-nav a {
+  position: relative;
+}
+
+.site-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0.625rem;
+  right: 0.625rem;
+  bottom: 0.15rem;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.site-nav a:hover::after,
+.site-nav a[aria-current="page"]::after {
+  transform: scaleX(1);
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 页头搜索框 */
+.header-search {
+  position: relative;
+}
+
+.header-search-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  font-size: 1rem;
+  pointer-events: none;
+}
+
+.header-search-input {
+  width: 190px;
+  padding: 0.45rem 0.9rem 0.45rem 2.15rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    width 0.2s ease;
+}
+
+.header-search-input::placeholder {
+  color: var(--ink-3);
+}
+
+.header-search-input:focus {
+  outline: none;
+  width: 240px;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.header-search-link {
+  display: none;
+}
+
+/* 搜索结果下拉 */
+.search-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), 0 14px 36px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: none;
+  z-index: 30;
+}
+
+.search-popover.open {
+  display: block;
+  animation: pop-in 0.16s ease both;
+}
+
+.search-popover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-popover-item {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-inline);
+  transition: background-color 0.15s ease;
+}
+
+.search-popover-item:hover,
+.search-popover-item.active {
+  background: var(--bg-soft);
+}
+
+.search-popover-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.search-popover-meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  margin-top: 0.15rem;
+}
+
+.search-popover-empty {
+  margin: 0;
+  padding: 1rem 0.9rem;
+  color: var(--ink-2);
+  font-size: 0.875rem;
+}
+
+.search-popover-more {
+  display: block;
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+  color: var(--accent);
+  transition: background-color 0.15s ease;
+}
+
+.search-popover-more:hover {
+  background: var(--bg-soft);
+}
+
+@media (max-width: 640px) {
+  .header-search {
+    display: none;
+  }
+  .header-search-link {
+    display: inline-flex;
+    width: 2.25rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--ink);
+    font-size: 1.05rem;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .header-search-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .theme-toggle {
   width: 2.25rem;
   height: 2.25rem;
-  margin-left: 0.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -190,6 +375,14 @@ a {
 
 .theme-toggle:active {
   transform: scale(0.94);
+}
+
+.theme-toggle .ph {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.theme-toggle:hover .ph {
+  transform: rotate(90deg);
 }
 
 .theme-toggle .ph-moon {
@@ -269,6 +462,12 @@ a {
   grid-template-columns: 6.5rem 1fr;
   gap: 0.5rem 1.25rem;
   padding: 1.2rem 0.25rem;
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease;
+}
+
+.post-row a:hover {
+  background: var(--bg-soft);
 }
 
 .post-row time {
@@ -327,17 +526,19 @@ a {
 
 .tag {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--ink-2);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   padding: 0.15rem 0.6rem;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .tag:hover {
   color: var(--accent);
   border-color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .tag-cloud {
@@ -369,15 +570,15 @@ a {
 }
 
 .tag-size-2 {
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
 }
 
 .tag-size-3 {
-  font-size: 1.0625rem;
+  font-size: 1rem;
 }
 
 .tag-size-4 {
-  font-size: 1.1875rem;
+  font-size: 1.125rem;
 }
 
 .tag-current {
@@ -822,26 +1023,21 @@ mark {
 /* ============================================================
    动效与可访问性
    ============================================================ */
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* 滚动进入视口时渐显；无 JS 时内容直接可见 */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(16px);
 }
 
-.home-hero,
-.page-head,
-.archive > *,
-.post-header {
-  animation: fade-up 0.45s ease both;
+.reveal {
+  transition: opacity 0.65s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0s);
 }
 
-.archive > *:nth-child(2) {
-  animation-delay: 0.05s;
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -854,5 +1050,9 @@ mark {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  .js .reveal {
+    opacity: 1;
+    transform: none;
   }
 }

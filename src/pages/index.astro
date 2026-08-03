@@ -16,10 +16,13 @@ for (const post of posts) {
   byYear.set(year, group);
 }
 const years = [...byYear.entries()];
+
+const yearGroupReveal = (index: number) =>
+  `--reveal-delay: ${Math.min(index * 80, 320)}ms`;
 ---
 
 <BaseLayout title={SITE.title} description={SITE.description}>
-  <header class="home-hero">
+  <header class="home-hero reveal">
     <h1>
       写点东西，<span class="accent">留给自己</span>，
       也留给路过的人。
@@ -31,8 +34,8 @@ const years = [...byYear.entries()];
 
   <section class="archive" aria-label="文章列表">
     {
-      years.map(([year, group]) => (
-        <div class="year-group">
+      years.map(([year, group], index) => (
+        <div class="year-group reveal" style={yearGroupReveal(index)}>
           <h2 class="year-label">{year}</h2>
           <ol class="post-list">
             {

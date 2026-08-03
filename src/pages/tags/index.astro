@@ -13,23 +13,22 @@ for (const post of posts) {
 const tags = [...counts.entries()].sort(
   (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh'),
 );
-const maxCount = Math.max(1, ...counts.values());
 ---
 
 <BaseLayout
   title={`标签 · ${SITE.name}`}
   description="按标签浏览全部文章。"
 >
-  <div class="page-head">
+  <div class="page-head reveal">
     <h1>标签</h1>
     <p>共 {posts.length} 篇文章，分布在 {tags.length} 个标签下。</p>
   </div>
 
-  <div class="container" style="padding-bottom: 5rem">
+  <div class="container reveal" style="padding-bottom: 5rem; --reveal-delay: 80ms">
     <ul class="tag-cloud">
       {
         tags.map(([tag, count]) => {
-          const size = Math.min(4, Math.max(1, Math.round((count / maxCount) * 4)));
+          const size = Math.min(4, count);
           return (
             <li>
               <a class={`tag tag-size-${size}`} href={`/tags/${tag}/`}>

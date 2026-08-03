@@ -8,7 +8,6 @@ const isActive = (href: string) =>
 const links = [
   { href: '/', label: '首页' },
   { href: '/tags/', label: '标签' },
-  { href: '/search/', label: '搜索' },
   { href: '/about/', label: '关于' },
 ];
 ---
@@ -27,6 +26,37 @@ const links = [
           {link.label}
         </a>
       ))}
+    </nav>
+    <div class="header-actions">
+      <div class="header-search" id="header-search">
+        <i class="ph ph-magnifying-glass header-search-icon" aria-hidden="true"></i>
+        <input
+          class="header-search-input"
+          type="text"
+          placeholder="搜索文章…"
+          autocomplete="off"
+          aria-label="站内搜索"
+          aria-controls="search-popover"
+        />
+        <div
+          class="search-popover"
+          id="search-popover"
+          role="listbox"
+          aria-label="搜索结果"
+        >
+          <p class="search-popover-empty" hidden>没有找到相关文章</p>
+          <ul class="search-popover-list" hidden></ul>
+          <a class="search-popover-more" href="/search/" hidden></a>
+        </div>
+      </div>
+      <a
+        class="header-search-link"
+        href="/search/"
+        aria-label="搜索"
+        title="搜索"
+      >
+        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+      </a>
       <button
         class="theme-toggle"
         id="theme-toggle"
@@ -36,11 +66,142 @@ const links = [
         <i class="ph ph-sun" aria-hidden="true"></i>
         <i class="ph ph-moon" aria-hidden="true"></i>
       </button>
-    </nav>
+    </div>
   </div>
 </header>
 
 <script>
+  import {
+    buildIndex,
+    searchIndex,
+    highlight,
+    formatDateCn,
+    type PostIndex,
+  } from '../scripts/search';
+
+  const container = document.getElementById('header-search')!;
+  const input = container.querySelector('input') as HTMLInputElement;
+  const popover = document.getElementById('search-popover')!;
+  const listEl = popover.querySelector('.search-popover-list') as HTMLUListElement;
+  const emptyEl = popover.querySelector(
+    '.search-popover-empty',
+  ) as HTMLParagraphElement;
+  const moreEl = popover.querySelector(
+    '.search-popover-more',
+  ) as HTMLAnchorElement;
+
+  let index: PostIndex[] = [];
+  let activeIndex = -1;
+
+  buildIndex().then((data) => {
+    index = data;
+  });
+
+  function closePopover() {
+    popover.classList.remove('open');
+    activeIndex = -1;
+  }
+
+  function openPopover() {
+    if (input.value.trim()) popover.classList.add('open');
+  }
+
+  function render(query: string) {
+    const items = searchIndex(index, query);
+    listEl.replaceChildren();
+    moreEl.hidden = true;
+    activeIndex = -1;
+
+    if (items.length === 0) {
+      emptyEl.hidden = false;
+      listEl.hidden = true;
+    } else {
+      emptyEl.hidden = true;
+      listEl.hidden = false;
+      for (const { post } of items.slice(0, 6)) {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'search-popover-item';
+        link.href = `/posts/${post.slug}/`;
+
+        const title = document.createElement('span');
+        title.className = 'search-popover-title';
+        highlight(title, post.title, query);
+
+        const meta = document.createElement('span');
+        meta.className = 'search-popover-meta';
+        meta.textContent = `${formatDateCn(post.date)}${
+          post.tags.length ? ` · ${post.tags.join(' / ')}` : ''
+        }`;
+
+        link.append(title, meta);
+        li.appendChild(link);
+        listEl.appendChild(li);
+      }
+      const url = new URL('/search/', window.location.origin);
+      url.searchParams.set('q', query);
+      moreEl.href = url.toString();
+      moreEl.textContent = `查看全部 ${items.length} 条结果`;
+      moreEl.hidden = false;
+    }
+    popover.classList.add('open');
+  }
+
+  let timer: number | undefined;
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    const q = input.value.trim();
+    if (!q) {
+      closePopover();
+      return;
+    }
+    timer = window.setTimeout(() => render(q), 120);
+  });
+
+  input.addEventListener('focus', () => {
+    if (input.value.trim()) render(input.value.trim());
+  });
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      input.value = '';
+      closePopover();
+      return;
+    }
+    if (event.key === 'Enter') {
+      const items = listEl.querySelectorAll('.search-popover-item');
+      if (activeIndex >= 0 && items[activeIndex]) {
+        (items[activeIndex] as HTMLAnchorElement).click();
+        return;
+      }
+      const hits = searchIndex(index, input.value.trim());
+      if (hits.length) {
+        window.location.href = `/posts/${hits[0].post.slug}/`;
+      } else {
+        const url = new URL('/search/', window.location.origin);
+        url.searchParams.set('q', input.value.trim());
+        window.location.href = url.toString();
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const items = listEl.querySelectorAll('.search-popover-item');
+      if (!items.length) return;
+      event.preventDefault();
+      if (event.key === 'ArrowDown') {
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+      } else {
+        activeIndex = Math.max(activeIndex - 1, 0);
+      }
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+      (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (!container.contains(event.target as Node)) closePopover();
+  });
+
   const toggle = document.getElementById('theme-toggle');
   toggle?.addEventListener('click', () => {
     const dark = document.documentElement.classList.toggle('dark');

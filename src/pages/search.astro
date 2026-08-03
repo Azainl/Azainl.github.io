@@ -40,6 +40,15 @@ import { SITE } from '../consts';
 </BaseLayout>
 
 <script>
+  import {
+    buildIndex,
+    searchIndex,
+    highlight,
+    formatDateCn,
+    snippet,
+    type PostIndex,
+  } from '../scripts/search';
+
   const input = document.getElementById('search-input') as HTMLInputElement;
   const clearBtn = document.getElementById('search-clear') as HTMLButtonElement;
   const meta = document.getElementById('search-meta') as HTMLElement;
@@ -47,82 +56,9 @@ import { SITE } from '../consts';
   const none = document.getElementById('search-none') as HTMLElement;
   const results = document.getElementById('search-results') as HTMLOListElement;
 
-  interface PostIndex {
-    slug: string;
-    title: string;
-    description: string;
-    date: string;
-    tags: string[];
-    content: string;
-  }
-
   let index: PostIndex[] = [];
 
-  function escapeRegExp(text: string): string {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  /** 把匹配到的关键词包进 <mark>，其余部分作为文本节点，避免 HTML 注入 */
-  function highlight(node: HTMLElement, text: string, query: string): void {
-    const re = new RegExp(`(${escapeRegExp(query)})`, 'ig');
-    const frag = document.createDocumentFragment();
-    let last = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) {
-        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-      }
-      const mark = document.createElement('mark');
-      mark.textContent = m[0];
-      frag.appendChild(mark);
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) {
-      frag.appendChild(document.createTextNode(text.slice(last)));
-    }
-    node.replaceChildren(frag);
-  }
-
-  function formatDate(iso: string): string {
-    const d = new Date(iso);
-    return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
-  }
-
-  function snippet(content: string, query: string): string {
-    const i = content.toLowerCase().indexOf(query.toLowerCase());
-    if (i < 0) return '';
-    const start = Math.max(0, i - 40);
-    const end = Math.min(content.length, i + query.length + 60);
-    return (
-      (start > 0 ? '…' : '') +
-      content.slice(start, end).trim() +
-      (end < content.length ? '…' : '')
-    );
-  }
-
-  function search(query: string) {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    const scored: { post: PostIndex; rank: number; contentHit: boolean }[] = [];
-    for (const post of index) {
-      const titleHit = post.title.toLowerCase().includes(q);
-      const descHit = post.description.toLowerCase().includes(q);
-      const tagHit = post.tags.join(' ').toLowerCase().includes(q);
-      const contentHit = post.content.toLowerCase().includes(q);
-      if (!titleHit && !descHit && !tagHit && !contentHit) continue;
-      let rank = 1;
-      if (titleHit) rank += 4;
-      else if (descHit) rank += 3;
-      else if (tagHit) rank += 2;
-      scored.push({ post, rank, contentHit });
-    }
-    scored.sort(
-      (a, b) => b.rank - a.rank || b.post.date.localeCompare(a.post.date),
-    );
-    return scored;
-  }
-
-  function render(items: ReturnType<typeof search>, query: string) {
+  function render(items: ReturnType<typeof searchIndex>, query: string) {
     results.replaceChildren();
     for (const { post, contentHit } of items) {
       const li = document.createElement('li');
@@ -133,7 +69,7 @@ import { SITE } from '../consts';
 
       const time = document.createElement('time');
       time.dateTime = post.date;
-      time.textContent = formatDate(post.date);
+      time.textContent = formatDateCn(post.date);
 
       const body = document.createElement('div');
       const h3 = document.createElement('h3');
@@ -188,7 +124,7 @@ import { SITE } from '../consts';
       empty.hidden = false;
       return;
     }
-    const items = search(q);
+    const items = searchIndex(index, q);
     empty.hidden = true;
     if (items.length === 0) {
       meta.hidden = true;
@@ -221,9 +157,8 @@ import { SITE } from '../consts';
     input.focus();
   });
 
-  fetch('/search.json')
-    .then((res) => (res.ok ? res.json() : []))
-    .then((data: PostIndex[]) => {
+  buildIndex()
+    .then((data) => {
       index = data;
       const initial = new URLSearchParams(window.location.search).get('q') ?? '';
       if (initial) {

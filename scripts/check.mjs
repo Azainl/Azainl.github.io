@@ -195,12 +195,66 @@ await runPage(`${BASE}/tags/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     tags: document.querySelectorAll('.tag-cloud .tag').length,
     counts: [...document.querySelectorAll('.tag-cloud .count')].map((e) => e.textContent),
-    sizes: [...document.querySelectorAll('.tag-cloud .tag')].map((e) => e.className),
+    sizeMap: Object.fromEntries(
+      [...document.querySelectorAll('.tag-cloud .tag')].map((a) => [
+        a.getAttribute('href'),
+        a.className,
+      ]),
+    ),
   }))()`);
   check(`${label}: 标签云渲染`, r.tags >= 8, `${r.tags} 个标签`);
   check(`${label}: 标签带数量`, r.counts.every((c) => /^\d+$/.test(c)), r.counts.join(','));
-  check(`${label}: 标签分级样式`, r.sizes.some((s) => s.includes('tag-size-')), r.sizes.join(','));
+  check(
+    `${label}: 分级按文章数`,
+    r.sizeMap['/tags/随笔/']?.includes('tag-size-2') &&
+      r.sizeMap['/tags/思考/']?.includes('tag-size-1'),
+    JSON.stringify(r.sizeMap),
+  );
 }, '标签总览');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.value = 'PowerShell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const popover = document.querySelector('.search-popover');
+    const items = document.querySelectorAll('.search-popover-item');
+    const more = document.querySelector('.search-popover-more');
+    return {
+      open: popover.classList.contains('open'),
+      count: items.length,
+      firstHref: items[0]?.getAttribute('href') || '',
+      markCount: document.querySelectorAll('.search-popover mark').length,
+      moreText: more.hidden ? '' : more.textContent,
+    };
+  })()`);
+  check(`${label}: 下拉打开`, r.open);
+  check(`${label}: 结果条目`, r.count >= 1, `${r.count} 条`);
+  check(`${label}: 结果链接正确`, r.firstHref.startsWith('/posts/'), r.firstHref);
+  check(`${label}: 下拉关键词高亮`, r.markCount >= 1, `${r.markCount} 个`);
+  check(`${label}: 查看全部链接`, r.moreText.includes('查看全部'), r.moreText);
+  const closed = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    return document.querySelector('.search-popover').classList.contains('open');
+  })()`);
+  check(`${label}: Esc 关闭`, closed === false);
+}, '页头搜索');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    box: getComputedStyle(document.querySelector('.header-search')).display,
+    link: getComputedStyle(document.querySelector('.header-search-link')).display,
+  }))()`);
+  check(`${label}: 搜索框隐藏`, r.box === 'none', r.box);
+  check(
+    `${label}: 图标按钮显示`,
+    r.link === 'inline-flex' || r.link === 'flex',
+    r.link,
+  );
+}, '页头搜索-移动端', { width: 390, height: 844 });
 
 await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({

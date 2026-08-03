@@ -19,7 +19,7 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
 
 <BaseLayout title={pageTitle} description={post.data.description}>
   <article class="post">
-    <header class="post-header">
+    <header class="post-header reveal">
       <p class="post-meta">
         <time datetime={post.data.date.toISOString()}>
           {formatDate(post.data.date)}
@@ -42,11 +42,11 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
       }
     </header>
 
-    <div class="prose">
+    <div class="prose reveal" style="--reveal-delay: 80ms">
       <Content />
     </div>
 
-    <footer class="post-footer">
+    <footer class="post-footer reveal" style="--reveal-delay: 160ms">
       {
         next && (
           <p>

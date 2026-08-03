@@ -21,13 +21,13 @@ const posts = (
   title={`#${tag} · ${SITE.name}`}
   description={`标签「${tag}」下的全部文章。`}
 >
-  <div class="page-head">
+  <div class="page-head reveal">
     <p class="post-meta">标签</p>
     <h1>#{tag}</h1>
     <p>{tagDescription(tag!)} · 共 {posts.length} 篇文章</p>
   </div>
 
-  <section class="archive" style="padding-top: 0">
+  <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
     <ol class="post-list">
       {
         posts.map((post) => (
