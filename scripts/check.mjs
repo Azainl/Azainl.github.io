@@ -190,6 +190,80 @@ await runPage(`${BASE}/`, async (cdp, label) => {
 }, '主题切换', { dark: true });
 await runPage(`${BASE}/`, (cdp, label) => baseChecks(cdp, label), '首页-移动端', { width: 390, height: 844 });
 
+// 首页标签与翻页
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => {
+    const tags = [...document.querySelectorAll('.post-row .tag')];
+    const cs = tags.length ? getComputedStyle(tags[0]) : null;
+    return {
+      nested: document.querySelectorAll('.post-row a a').length,
+      tagCount: tags.length,
+      fontSize: cs?.fontSize,
+      padTop: cs?.paddingTop,
+      height: tags[0] ? Math.round(tags[0].getBoundingClientRect().height) : 0,
+      visibleRows: [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length,
+      navVisible: document.getElementById('pagination').hidden === false,
+    };
+  })()`);
+  check(`${label}: 无嵌套链接`, r.nested === 0, `${r.nested} 个`);
+  check(`${label}: 标签数量`, r.tagCount >= 8, `${r.tagCount} 个`);
+  check(`${label}: 标签字号统一`, r.fontSize === '13px', r.fontSize);
+  check(`${label}: 标签高度正常`, r.padTop === '2.4px' && r.height < 30, `pad=${r.padTop} h=${r.height}`);
+  check(`${label}: 首页第 1 页文章数`, r.visibleRows === 4, `${r.visibleRows} 篇`);
+  check(`${label}: 翻页控件显示`, r.navVisible);
+}, '首页标签与翻页');
+
+await runPage(`${BASE}/?page=2`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
+  const r = await evaluate(cdp, `(() => {
+    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    const active = document.querySelector('.page-number[aria-current="page"]');
+    const prev = document.querySelector('[data-dir="prev"]');
+    return {
+      visibleRows: rows.length,
+      activePage: active?.dataset.page || '',
+      prevDisabled: prev.hasAttribute('aria-disabled'),
+      url: location.search,
+    };
+  })()`);
+  check(`${label}: 第 2 页文章数`, r.visibleRows === 1, `${r.visibleRows} 篇`);
+  check(`${label}: 当前页码高亮`, r.activePage === '2', r.activePage);
+  check(`${label}: 上一页可用`, r.prevDisabled === false);
+  check(`${label}: URL 页码`, r.url === '?page=2', r.url);
+}, '首页翻页-第2页');
+
+await runPage(`${BASE}/?page=9`, async (cdp, label) => {
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
+  const r = await evaluate(cdp, `(() => {
+    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    const active = document.querySelector('.page-number[aria-current="page"]');
+    const next = document.querySelector('[data-dir="next"]');
+    return {
+      visibleRows: rows.length,
+      activePage: active?.dataset.page || '',
+      nextDisabled: next.hasAttribute('aria-disabled'),
+      url: location.search,
+    };
+  })()`);
+  check(`${label}: 越界回退到末页`, r.visibleRows === 1 && r.activePage === '2', `${r.visibleRows} 篇`);
+  check(`${label}: 下一页禁用`, r.nextDisabled);
+}, '首页翻页-越界');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    document.querySelector('.page-number[data-page="2"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
+    return {
+      visibleRows: rows.length,
+      url: location.search,
+      paging: document.querySelector('.archive').classList.contains('paging'),
+    };
+  })()`);
+  check(`${label}: 点击翻页`, r.visibleRows === 1 && r.url === '?page=2', `${r.visibleRows} 篇`);
+  check(`${label}: 动画结束恢复`, r.paging === false);
+}, '首页翻页-点击');
+
 // 标签页与搜索页
 await runPage(`${BASE}/tags/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({

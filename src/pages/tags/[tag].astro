@@ -39,24 +39,24 @@ const posts = (
               <div>
                 <h3>{post.data.title}</h3>
                 <p>{post.data.description}</p>
-                {
-                  post.data.tags.length > 0 && (
-                    <ul class="tag-list">
-                      {post.data.tags.map((t) => (
-                        <li>
-                          <a
-                            class={`tag${t === tag ? ' tag-current' : ''}`}
-                            href={`/tags/${t}/`}
-                          >
-                            #{t}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                }
               </div>
             </a>
+            {
+              post.data.tags.length > 0 && (
+                <ul class="tag-list">
+                  {post.data.tags.map((t) => (
+                    <li>
+                      <a
+                        class={`tag${t === tag ? ' tag-current' : ''}`}
+                        href={`/tags/${t}/`}
+                      >
+                        #{t}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
           </li>
         ))
       }

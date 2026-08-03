@@ -8,6 +8,15 @@ const posts = (
   await getCollection('posts', ({ data }) => !data.draft)
 ).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
 
+// 每页文章数（首页翻页）
+const POSTS_PER_PAGE = 4;
+const totalPages = Math.max(1, Math.ceil(posts.length / POSTS_PER_PAGE));
+
+const pageOf = new Map<string, number>();
+posts.forEach((post, i) => {
+  pageOf.set(post.id, Math.floor(i / POSTS_PER_PAGE) + 1);
+});
+
 const byYear = new Map<number, typeof posts>();
 for (const post of posts) {
   const year = post.data.date.getFullYear();
@@ -40,7 +49,7 @@ const yearGroupReveal = (index: number) =>
           <ol class="post-list">
             {
               group.map((post) => (
-                <li class="post-row">
+                <li class="post-row" data-page={pageOf.get(post.id)}>
                   <a href={`/posts/${post.slug}/`}>
                     <time datetime={post.data.date.toISOString()}>
                       {formatDateShort(post.data.date)}
@@ -48,19 +57,19 @@ const yearGroupReveal = (index: number) =>
                     <div>
                       <h3>{post.data.title}</h3>
                       <p>{post.data.description}</p>
-                      {
-                        post.data.tags.length > 0 && (
-                          <ul class="tag-list">
-                            {post.data.tags.map((tag) => (
-                              <li>
-                                <a class="tag" href={`/tags/${tag}/`}>#{tag}</a>
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      }
                     </div>
                   </a>
+                  {
+                    post.data.tags.length > 0 && (
+                      <ul class="tag-list">
+                        {post.data.tags.map((tag) => (
+                          <li>
+                            <a class="tag" href={`/tags/${tag}/`}>#{tag}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  }
                 </li>
               ))
             }
@@ -68,5 +77,90 @@ const yearGroupReveal = (index: number) =>
         </div>
       ))
     }
+    <nav
+      class="pagination"
+      id="pagination"
+      aria-label="文章翻页"
+      data-total={totalPages}
+      hidden
+    >
+      <a class="page-btn" href="?page=1" data-dir="prev">← 上一页</a>
+      <ol class="page-numbers">
+        {
+          Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+            <li>
+              <a class="page-number" data-page={n} href={`?page=${n}`}>{n}</a>
+            </li>
+          ))
+        }
+      </ol>
+      <a class="page-btn" href={`?page=${totalPages}`} data-dir="next">
+        下一页 →
+      </a>
+    </nav>
   </section>
 </BaseLayout>
+
+<script>
+  const nav = document.getElementById('pagination') as HTMLElement;
+  const archive = document.querySelector('.archive') as HTMLElement;
+  const rows = [...document.querySelectorAll('.post-row[data-page]')];
+  const numLinks = [...nav.querySelectorAll('.page-number')];
+  const prevBtn = nav.querySelector('[data-dir="prev"]') as HTMLAnchorElement;
+  const nextBtn = nav.querySelector('[data-dir="next"]') as HTMLAnchorElement;
+  const total = Number(nav.dataset.total);
+
+  function currentPage(): number {
+    const raw = new URLSearchParams(window.location.search).get('page');
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    if (Number.isNaN(parsed)) return 1;
+    return Math.min(total, Math.max(1, parsed));
+  }
+
+  function applyPage(page: number, animate: boolean): void {
+    if (animate) archive.classList.add('paging');
+    window.setTimeout(
+      () => {
+        for (const row of rows) {
+          row.hidden = Number(row.dataset.page) !== page;
+        }
+        for (const el of numLinks) {
+          if (Number(el.dataset.page) === page) {
+            el.setAttribute('aria-current', 'page');
+          } else {
+            el.removeAttribute('aria-current');
+          }
+        }
+        prevBtn.toggleAttribute('aria-disabled', page === 1);
+        nextBtn.toggleAttribute('aria-disabled', page === total);
+
+        const url = new URL(window.location.href);
+        if (page === 1) url.searchParams.delete('page');
+        else url.searchParams.set('page', String(page));
+        window.history.replaceState(null, '', url);
+
+        if (animate) {
+          requestAnimationFrame(() => archive.classList.remove('paging'));
+        }
+      },
+      animate ? 180 : 0,
+    );
+  }
+
+  nav.hidden = false;
+  for (const el of numLinks) {
+    el.addEventListener('click', (event) => {
+      event.preventDefault();
+      applyPage(Number(el.dataset.page), true);
+    });
+  }
+  prevBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    applyPage(currentPage() - 1, true);
+  });
+  nextBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    applyPage(currentPage() + 1, true);
+  });
+  applyPage(currentPage(), false);
+</script>

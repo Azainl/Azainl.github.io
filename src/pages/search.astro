@@ -98,10 +98,9 @@ import { SITE } from '../consts';
         item.appendChild(tagLink);
         tags.appendChild(item);
       }
-      body.appendChild(tags);
 
       link.append(time, body);
-      li.appendChild(link);
+      li.append(link, tags);
       results.appendChild(li);
     }
   }
