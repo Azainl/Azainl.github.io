@@ -350,12 +350,10 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     const navOnPost = document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '';
     const backBtn = document.getElementById('back-button');
     const backVisible = !backBtn.hidden;
-    const backHasPrev = backBtn.dataset.hasPrev;
     const before = document.documentElement.classList.contains('dark');
-    document.getElementById('theme-toggle')?.click();
+    document.getElementById('theme-toggle')?.click(); // 切到深色
     await new Promise((r) => setTimeout(r, 100));
     const after = document.documentElement.classList.contains('dark');
-    document.getElementById('theme-toggle')?.click();
     return {
       path: decodeURIComponent(location.pathname),
       href,
@@ -363,8 +361,8 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       h1,
       navOnPost,
       backVisible,
-      backHasPrev,
       toggleWorks: before !== after,
+      darkOnPost: document.documentElement.classList.contains('dark'),
     };
   })()`);
   check(`${label}: 客户端导航到文章`, r.path === r.href && r.h1.length > 0, r.href.slice(0, 24));
@@ -372,6 +370,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 文章页无残留高亮`, r.navOnPost === '', r.navOnPost || '(none)');
   check(`${label}: 返回按钮显示`, r.backVisible === true, String(r.backVisible));
   check(`${label}: 主题切换仍可用`, r.toggleWorks);
+  check(`${label}: 主题在文章页保持`, r.darkOnPost === true, String(r.darkOnPost));
 
   // 点击返回按钮回首页（站内导航栈 + 客户端路由，不应整页刷新）
   await evaluate(cdp, `document.getElementById('back-button').click(); 'ok'`);
@@ -383,6 +382,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
         return {
           navOnHome: document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '',
           marker: window.__vtMarker,
+          darkOnHome: document.documentElement.classList.contains('dark'),
         };
       })()`);
     } catch {}
@@ -391,6 +391,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 返回首页`, !!home, home ? home.navOnHome : '(未返回)');
   check(`${label}: 返回未整页刷新`, home?.marker === 'alive', String(home?.marker));
   check(`${label}: 返回后导航高亮恢复`, home?.navOnHome === '首页', home?.navOnHome || '(none)');
+  check(`${label}: 主题返回后保持`, home?.darkOnHome === true, String(home?.darkOnHome));
 
   let pageTurn = null;
   for (let i = 0; i < 6 && !pageTurn; i++) {

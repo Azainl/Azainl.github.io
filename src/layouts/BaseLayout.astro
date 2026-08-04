@@ -91,6 +91,14 @@ const ogImage = new URL('/og.svg', Astro.site).href;
           window.location.reload();
         }
       }
+      // 交换前把当前 <html> 的类（主题、js 标记）带到新文档，
+      // 避免客户端导航时深浅主题被重置
+      document.addEventListener('astro:before-swap', (event) => {
+        const currentClass = document.documentElement.getAttribute('class');
+        if (currentClass) {
+          event.newDocument.documentElement.setAttribute('class', currentClass);
+        }
+      });
       window.addEventListener('popstate', () => {
         window.setTimeout(ensurePageMatchesUrl, 1200);
       });
