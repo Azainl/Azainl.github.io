@@ -1,12 +1,30 @@
 ---
-import '@fontsource-variable/geist';
-import '@fontsource-variable/source-serif-4';
-import '@phosphor-icons/web/regular';
 import '../styles/global.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { SITE } from '../consts';
 import { ClientRouter } from 'astro:transitions';
+
+// 只引入拉丁子集的可变字体，避免下载无用字符集
+import geistUrl from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
+import serifUrl from '@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2?url';
+
+const fontFaces = `
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('${geistUrl}') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Source Serif 4 Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('${serifUrl}') format('woff2-variations');
+}
+`;
 
 interface Props {
   title?: string;
@@ -33,6 +51,8 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={canonical} />
     <link rel="alternate" type="application/rss+xml" title={SITE.title} href="/rss.xml" />
+    <link rel="preload" href={geistUrl} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={serifUrl} as="font" type="font/woff2" crossorigin />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={title} />
@@ -80,3 +100,5 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     </script>
   </body>
 </html>
+
+<style is:inline set:html={fontFaces}></style>

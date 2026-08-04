@@ -1,0 +1,32 @@
+---
+interface Props {
+  name:
+    | 'arrow-left'
+    | 'magnifying-glass'
+    | 'moon'
+    | 'rss-simple'
+    | 'sun'
+    | 'x';
+  class?: string;
+}
+
+const { name, class: className = '' } = Astro.props;
+
+import arrowLeft from '@phosphor-icons/core/assets/regular/arrow-left.svg?raw';
+import magnifyingGlass from '@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw';
+import moon from '@phosphor-icons/core/assets/regular/moon.svg?raw';
+import rssSimple from '@phosphor-icons/core/assets/regular/rss-simple.svg?raw';
+import sun from '@phosphor-icons/core/assets/regular/sun.svg?raw';
+import x from '@phosphor-icons/core/assets/regular/x.svg?raw';
+
+const icons = {
+  'arrow-left': arrowLeft,
+  'magnifying-glass': magnifyingGlass,
+  moon,
+  'rss-simple': rssSimple,
+  sun,
+  x,
+};
+---
+
+<span class={`icon ${className}`} aria-hidden="true" set:html={icons[name]} />

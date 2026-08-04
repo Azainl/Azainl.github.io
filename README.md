@@ -73,5 +73,5 @@ vercel --prod
 - [Astro](https://astro.build) 静态站点框架
 - Content Collections 内容集合 + Zod 校验
 - 自托管可变字体：Geist（界面）、Source Serif 4（标题）
-- Phosphor Icons 图标
+- Phosphor 内联 SVG 图标（零字体请求）
 - 手写 CSS 设计令牌，支持深浅两套主题

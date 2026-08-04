@@ -1,5 +1,6 @@
 ---
 import { SITE } from '../consts';
+import Icon from './Icon.astro';
 const year = new Date().getFullYear();
 ---
 
@@ -16,7 +17,7 @@ const year = new Date().getFullYear();
         aria-label="RSS 订阅"
         title="RSS 订阅"
       >
-        <i class="ph ph-rss-simple" aria-hidden="true"></i>
+        <Icon name="rss-simple" />
       </a>
     </div>
   </div>

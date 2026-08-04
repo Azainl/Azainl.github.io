@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
+import Icon from '../components/Icon.astro';
 ---
 
 <BaseLayout
@@ -14,7 +15,7 @@ import { SITE } from '../consts';
     </div>
 
     <div class="search-box">
-      <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+      <Icon name="magnifying-glass" />
       <input
         id="search-input"
         class="search-input"
@@ -24,7 +25,7 @@ import { SITE } from '../consts';
         aria-label="搜索关键词"
       />
       <button id="search-clear" class="search-clear" type="button" aria-label="清空搜索">
-        <i class="ph ph-x" aria-hidden="true"></i>
+        <Icon name="x" />
       </button>
     </div>
 

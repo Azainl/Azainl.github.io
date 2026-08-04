@@ -1,5 +1,6 @@
 ---
 import { SITE } from '../consts';
+import Icon from './Icon.astro';
 
 const path = Astro.url.pathname;
 const isActive = (href: string) =>
@@ -22,7 +23,7 @@ const links = [
       title="返回上一页"
       hidden
     >
-      <i class="ph ph-arrow-left" aria-hidden="true"></i>
+      <Icon name="arrow-left" />
     </button>
     <a class="wordmark" href="/" aria-label="{SITE.name} 首页">
       Az<span>ain</span>
@@ -39,7 +40,7 @@ const links = [
     </nav>
     <div class="header-actions">
       <div class="header-search" id="header-search">
-        <i class="ph ph-magnifying-glass header-search-icon" aria-hidden="true"></i>
+        <Icon name="magnifying-glass" class="header-search-icon" />
         <input
           class="header-search-input"
           type="text"
@@ -65,7 +66,7 @@ const links = [
         aria-label="搜索"
         title="搜索"
       >
-        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+        <Icon name="magnifying-glass" />
       </a>
       <button
         class="theme-toggle"
@@ -73,8 +74,8 @@ const links = [
         type="button"
         aria-label="切换深浅主题"
       >
-        <i class="ph ph-sun" aria-hidden="true"></i>
-        <i class="ph ph-moon" aria-hidden="true"></i>
+        <Icon name="sun" class="icon-sun" />
+        <Icon name="moon" class="icon-moon" />
       </button>
     </div>
   </div>
