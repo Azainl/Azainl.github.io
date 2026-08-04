@@ -226,6 +226,33 @@ a {
   gap: 0.5rem;
 }
 
+/* 左上角返回按钮 */
+.back-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.05rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.back-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.back-button:active {
+  transform: scale(0.94);
+}
+
 /* 页头搜索框 */
 .header-search {
   position: relative;

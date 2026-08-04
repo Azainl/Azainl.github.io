@@ -14,6 +14,16 @@ const links = [
 
 <header class="site-header">
   <div class="header-inner">
+    <button
+      class="back-button"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+      title="返回上一页"
+      hidden
+    >
+      <i class="ph ph-arrow-left" aria-hidden="true"></i>
+    </button>
     <a class="wordmark" href="/" aria-label="{SITE.name} 首页">
       Az<span>ain</span>
     </a>
@@ -206,6 +216,22 @@ const links = [
       const dark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     });
+
+    // 左上角返回按钮：非首页显示；有站内历史则返回上一页，否则回首页
+    const backBtn = document.getElementById('back-button');
+    if (backBtn) {
+      backBtn.hidden = window.location.pathname === '/';
+      backBtn.dataset.hasPrev = String((history.state?.index ?? 0) > 0);
+      backBtn.addEventListener('click', () => {
+        if (backBtn.dataset.hasPrev === 'true') {
+          history.back();
+        } else {
+          const homeLink = document.querySelector('.wordmark') as HTMLAnchorElement | null;
+          if (homeLink) homeLink.click();
+          else window.location.href = '/';
+        }
+      });
+    }
   }
 
   // 客户端切换页面后，保持导航高亮与当前页一致

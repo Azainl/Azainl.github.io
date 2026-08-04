@@ -348,6 +348,9 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     await new Promise((r) => setTimeout(r, 700));
     const h1 = document.querySelector('.post-title')?.textContent?.trim() || '';
     const navOnPost = document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '';
+    const backBtn = document.getElementById('back-button');
+    const backVisible = !backBtn.hidden;
+    const backHasPrev = backBtn.dataset.hasPrev;
     const before = document.documentElement.classList.contains('dark');
     document.getElementById('theme-toggle')?.click();
     await new Promise((r) => setTimeout(r, 100));
@@ -359,16 +362,19 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       marker: window.__vtMarker,
       h1,
       navOnPost,
+      backVisible,
+      backHasPrev,
       toggleWorks: before !== after,
     };
   })()`);
   check(`${label}: 客户端导航到文章`, r.path === r.href && r.h1.length > 0, r.href.slice(0, 24));
   check(`${label}: 未整页刷新`, r.marker === 'alive');
   check(`${label}: 文章页无残留高亮`, r.navOnPost === '', r.navOnPost || '(none)');
+  check(`${label}: 返回按钮显示`, r.backVisible === true, `hasPrev=${r.backHasPrev}`);
   check(`${label}: 主题切换仍可用`, r.toggleWorks);
 
-  // 返回首页（客户端交换失败时兜底脚本会整页刷新，因此分阶段重试）
-  await evaluate(cdp, `history.back(); 'ok'`);
+  // 点击返回按钮回首页（客户端交换失败时兜底脚本会整页刷新，因此分阶段重试）
+  await evaluate(cdp, `document.getElementById('back-button').click(); 'ok'`);
   let home = null;
   for (let i = 0; i < 10 && !home; i++) {
     try {
@@ -407,6 +413,30 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     pageTurn ? `第 2 页 ${pageTurn.visible} 篇` : '(不可用)',
   );
 }, '页面切换-往返');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    hidden: document.getElementById('back-button')?.hidden,
+  }))()`);
+  check(`${label}: 首页隐藏返回按钮`, r.hidden === true, String(r.hidden));
+}, '返回按钮-首页');
+
+await runPage(`${BASE}/posts/hello-world/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    const btn = document.getElementById('back-button');
+    const visible = !btn.hidden;
+    const hasPrev = btn.dataset.hasPrev;
+    btn.click();
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (location.pathname === '/') break;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    return { visible, hasPrev, path: location.pathname };
+  })()`);
+  check(`${label}: 文章页显示且无站内历史`, r.visible === true && r.hasPrev === 'false', `hasPrev=${r.hasPrev}`);
+  check(`${label}: 点击回首页`, r.path === '/', r.path);
+}, '返回按钮-文章页直进');
 
 // 标签页与搜索页
 await runPage(`${BASE}/tags/`, async (cdp, label) => {
