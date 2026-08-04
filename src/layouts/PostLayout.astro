@@ -4,6 +4,7 @@ import type { CollectionEntry } from 'astro:content';
 import { SITE } from '../consts';
 import { formatDate } from '../utils/formatDate';
 import { readingTime } from '../utils/readingTime';
+import { vtName } from '../utils/vtName';
 
 interface Props {
   post: CollectionEntry<'posts'>;
@@ -27,7 +28,9 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
         <span class="dot" aria-hidden="true">·</span>
         <span>{minutes} 分钟阅读</span>
       </p>
-      <h1 class="post-title">{post.data.title}</h1>
+      <h1 class="post-title" transition:name={vtName(post.slug)}>
+        {post.data.title}
+      </h1>
       <p class="post-lead">{post.data.description}</p>
       {
         post.data.tags.length > 0 && (

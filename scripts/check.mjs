@@ -334,6 +334,80 @@ await runPage(`${BASE}/?page=999`, async (cdp, label) => {
   );
 }, '翻页边界-末页');
 
+// View Transitions：客户端切换页面
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    window.__vtMarker = 'alive';
+    const link = document.querySelector('.post-row a');
+    const href = decodeURIComponent(link.getAttribute('href'));
+    link.click();
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (decodeURIComponent(location.pathname) === href) break;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+    const h1 = document.querySelector('.post-title')?.textContent?.trim() || '';
+    const navOnPost = document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '';
+    const before = document.documentElement.classList.contains('dark');
+    document.getElementById('theme-toggle')?.click();
+    await new Promise((r) => setTimeout(r, 100));
+    const after = document.documentElement.classList.contains('dark');
+    document.getElementById('theme-toggle')?.click();
+    return {
+      path: decodeURIComponent(location.pathname),
+      href,
+      marker: window.__vtMarker,
+      h1,
+      navOnPost,
+      toggleWorks: before !== after,
+    };
+  })()`);
+  check(`${label}: 客户端导航到文章`, r.path === r.href && r.h1.length > 0, r.href.slice(0, 24));
+  check(`${label}: 未整页刷新`, r.marker === 'alive');
+  check(`${label}: 文章页无残留高亮`, r.navOnPost === '', r.navOnPost || '(none)');
+  check(`${label}: 主题切换仍可用`, r.toggleWorks);
+
+  // 返回首页（客户端交换失败时兜底脚本会整页刷新，因此分阶段重试）
+  await evaluate(cdp, `history.back(); 'ok'`);
+  let home = null;
+  for (let i = 0; i < 10 && !home; i++) {
+    try {
+      home = await evaluate(cdp, `(() => {
+        if (location.pathname !== '/' || !document.querySelectorAll('.post-row').length) return null;
+        return {
+          navOnHome: document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '',
+        };
+      })()`);
+    } catch {}
+    if (!home) await sleep(1000);
+  }
+  check(`${label}: 返回首页`, !!home, home ? home.navOnHome : '(未返回)');
+  check(`${label}: 返回后导航高亮恢复`, home?.navOnHome === '首页', home?.navOnHome || '(none)');
+
+  let pageTurn = null;
+  for (let i = 0; i < 6 && !pageTurn; i++) {
+    try {
+      pageTurn = await evaluate(cdp, `(async () => {
+        const nav = document.getElementById('pagination');
+        if (!nav || nav.hidden) return null;
+        document.querySelector('.page-number[data-page="2"]')?.click();
+        await new Promise((r) => setTimeout(r, 450));
+        const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
+        return {
+          visible,
+          page2Count: document.querySelectorAll('.post-row[data-page="2"]').length,
+        };
+      })()`);
+    } catch {}
+    if (!pageTurn) await sleep(800);
+  }
+  check(
+    `${label}: 返回后翻页可用`,
+    !!pageTurn && pageTurn.visible === pageTurn.page2Count && pageTurn.page2Count > 0,
+    pageTurn ? `第 2 页 ${pageTurn.visible} 篇` : '(不可用)',
+  );
+}, '页面切换-往返');
+
 // 标签页与搜索页
 await runPage(`${BASE}/tags/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({

@@ -48,116 +48,121 @@ import { SITE } from '../consts';
     snippet,
     type PostIndex,
   } from '../scripts/search';
-
-  const input = document.getElementById('search-input') as HTMLInputElement;
-  const clearBtn = document.getElementById('search-clear') as HTMLButtonElement;
-  const meta = document.getElementById('search-meta') as HTMLElement;
-  const empty = document.getElementById('search-empty') as HTMLElement;
-  const none = document.getElementById('search-none') as HTMLElement;
-  const results = document.getElementById('search-results') as HTMLOListElement;
+  import { vtName } from '../utils/vtName';
 
   let index: PostIndex[] = [];
-
-  function render(items: ReturnType<typeof searchIndex>, query: string) {
-    results.replaceChildren();
-    for (const { post, contentHit } of items) {
-      const li = document.createElement('li');
-      li.className = 'post-row search-result-row';
-
-      const link = document.createElement('a');
-      link.href = `/posts/${post.slug}/`;
-
-      const time = document.createElement('time');
-      time.dateTime = post.date;
-      time.textContent = formatDateCn(post.date);
-
-      const body = document.createElement('div');
-      const h3 = document.createElement('h3');
-      highlight(h3, post.title, query);
-
-      const desc = document.createElement('p');
-      highlight(desc, post.description, query);
-
-      if (contentHit) {
-        const snip = document.createElement('p');
-        snip.className = 'search-snippet';
-        snip.textContent = snippet(post.content, query);
-        body.append(h3, desc, snip);
-      } else {
-        body.append(h3, desc);
-      }
-
-      const tags = document.createElement('ul');
-      tags.className = 'tag-list';
-      for (const tag of post.tags) {
-        const item = document.createElement('li');
-        const tagLink = document.createElement('a');
-        tagLink.className = 'tag';
-        tagLink.href = `/tags/${tag}/`;
-        tagLink.textContent = `#${tag}`;
-        item.appendChild(tagLink);
-        tags.appendChild(item);
-      }
-
-      link.append(time, body);
-      li.append(link, tags);
-      results.appendChild(li);
-    }
-  }
-
-  function updateUrl(query: string) {
-    const url = new URL(window.location.href);
-    if (query) url.searchParams.set('q', query);
-    else url.searchParams.delete('q');
-    window.history.replaceState(null, '', url);
-  }
-
-  function run() {
-    const q = input.value.trim();
-    updateUrl(q);
-    clearBtn.classList.toggle('visible', q.length > 0);
-    if (!q) {
-      meta.hidden = true;
-      results.hidden = true;
-      none.hidden = true;
-      empty.hidden = false;
-      return;
-    }
-    const items = searchIndex(index, q);
-    empty.hidden = true;
-    if (items.length === 0) {
-      meta.hidden = true;
-      results.hidden = true;
-      none.hidden = false;
-      return;
-    }
-    none.hidden = true;
-    meta.hidden = false;
-    meta.textContent = `找到 ${items.length} 篇文章`;
-    render(items, q);
-    results.hidden = false;
-  }
-
   let timer: number | undefined;
-  input.addEventListener('input', () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(run, 120);
-  });
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
+
+  function initSearch() {
+    const input = document.getElementById('search-input') as HTMLInputElement;
+    if (!input || input.dataset.inited) return;
+    input.dataset.inited = 'true';
+
+    const clearBtn = document.getElementById('search-clear') as HTMLButtonElement;
+    const meta = document.getElementById('search-meta') as HTMLElement;
+    const empty = document.getElementById('search-empty') as HTMLElement;
+    const none = document.getElementById('search-none') as HTMLElement;
+    const results = document.getElementById('search-results') as HTMLOListElement;
+
+    function render(items: ReturnType<typeof searchIndex>, query: string) {
+      results.replaceChildren();
+      for (const { post, contentHit } of items) {
+        const li = document.createElement('li');
+        li.className = 'post-row search-result-row';
+
+        const link = document.createElement('a');
+        link.href = `/posts/${post.slug}/`;
+
+        const time = document.createElement('time');
+        time.dateTime = post.date;
+        time.textContent = formatDateCn(post.date);
+
+        const body = document.createElement('div');
+        const h3 = document.createElement('h3');
+        h3.style.viewTransitionName = vtName(post.slug);
+        highlight(h3, post.title, query);
+
+        const desc = document.createElement('p');
+        highlight(desc, post.description, query);
+
+        if (contentHit) {
+          const snip = document.createElement('p');
+          snip.className = 'search-snippet';
+          snip.textContent = snippet(post.content, query);
+          body.append(h3, desc, snip);
+        } else {
+          body.append(h3, desc);
+        }
+
+        const tags = document.createElement('ul');
+        tags.className = 'tag-list';
+        for (const tag of post.tags) {
+          const item = document.createElement('li');
+          const tagLink = document.createElement('a');
+          tagLink.className = 'tag';
+          tagLink.href = `/tags/${tag}/`;
+          tagLink.textContent = `#${tag}`;
+          item.appendChild(tagLink);
+          tags.appendChild(item);
+        }
+
+        link.append(time, body);
+        li.append(link, tags);
+        results.appendChild(li);
+      }
+    }
+
+    function updateUrl(query: string) {
+      const url = new URL(window.location.href);
+      if (query) url.searchParams.set('q', query);
+      else url.searchParams.delete('q');
+      window.history.replaceState(null, '', url);
+    }
+
+    function run() {
+      const q = input.value.trim();
+      updateUrl(q);
+      clearBtn.classList.toggle('visible', q.length > 0);
+      if (!q) {
+        meta.hidden = true;
+        results.hidden = true;
+        none.hidden = true;
+        empty.hidden = false;
+        return;
+      }
+      const items = searchIndex(index, q);
+      empty.hidden = true;
+      if (items.length === 0) {
+        meta.hidden = true;
+        results.hidden = true;
+        none.hidden = false;
+        return;
+      }
+      none.hidden = true;
+      meta.hidden = false;
+      meta.textContent = `找到 ${items.length} 篇文章`;
+      render(items, q);
+      results.hidden = false;
+    }
+
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(run, 120);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        input.value = '';
+        run();
+        input.focus();
+      }
+    });
+    clearBtn.addEventListener('click', () => {
       input.value = '';
       run();
       input.focus();
-    }
-  });
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    run();
-    input.focus();
-  });
+    });
 
-  buildIndex()
-    .then((data) => {
+    buildIndex().then((data) => {
       index = data;
       const initial = new URLSearchParams(window.location.search).get('q') ?? '';
       if (initial) {
@@ -167,4 +172,7 @@ import { SITE } from '../consts';
         empty.hidden = false;
       }
     });
+  }
+
+  document.addEventListener('astro:page-load', initSearch);
 </script>

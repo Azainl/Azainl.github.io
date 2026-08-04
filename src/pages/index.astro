@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import { SITE } from '../consts';
 import { formatDateShort } from '../utils/formatDate';
+import { vtName } from '../utils/vtName';
 
 const posts = (
   await getCollection('posts', ({ data }) => !data.draft)
@@ -55,7 +56,9 @@ const yearGroupReveal = (index: number) =>
                       {formatDateShort(post.data.date)}
                     </time>
                     <div>
-                      <h3>{post.data.title}</h3>
+                      <h3 transition:name={vtName(post.slug)}>
+                        {post.data.title}
+                      </h3>
                       <p>{post.data.description}</p>
                     </div>
                   </a>
@@ -102,104 +105,110 @@ const yearGroupReveal = (index: number) =>
 </BaseLayout>
 
 <script>
-  const nav = document.getElementById('pagination') as HTMLElement;
-  const archive = document.querySelector('.archive') as HTMLElement;
-  const rows = [...document.querySelectorAll('.post-row[data-page]')];
-  const numLinks = [...nav.querySelectorAll('.page-number')];
-  const prevBtn = nav.querySelector('[data-dir="prev"]') as HTMLAnchorElement;
-  const nextBtn = nav.querySelector('[data-dir="next"]') as HTMLAnchorElement;
-  const total = Number(nav.dataset.total);
-  let busy = false;
+  function initPagination() {
+    const nav = document.getElementById('pagination');
+    if (!nav || nav.dataset.inited) return;
+    nav.dataset.inited = 'true';
 
-  function currentPage(): number {
-    const raw = new URLSearchParams(window.location.search).get('page');
-    const parsed = raw ? parseInt(raw, 10) : NaN;
-    if (Number.isNaN(parsed)) return 1;
-    return Math.min(total, Math.max(1, parsed));
-  }
+    const archive = document.querySelector('.archive') as HTMLElement;
+    const rows = [...document.querySelectorAll('.post-row[data-page]')];
+    const numLinks = [...nav.querySelectorAll('.page-number')];
+    const prevBtn = nav.querySelector('[data-dir="prev"]') as HTMLAnchorElement;
+    const nextBtn = nav.querySelector('[data-dir="next"]') as HTMLAnchorElement;
+    const total = Number(nav.dataset.total);
+    let busy = false;
 
-  function setDisabled(el: HTMLAnchorElement, disabled: boolean) {
-    if (disabled) {
-      el.setAttribute('aria-disabled', 'true');
-      el.setAttribute('tabindex', '-1');
-    } else {
-      el.removeAttribute('aria-disabled');
-      el.removeAttribute('tabindex');
+    function currentPage(): number {
+      const raw = new URLSearchParams(window.location.search).get('page');
+      const parsed = raw ? parseInt(raw, 10) : NaN;
+      if (Number.isNaN(parsed)) return 1;
+      return Math.min(total, Math.max(1, parsed));
     }
-  }
 
-  function applyPage(page: number, animate: boolean): void {
-    if (busy) return;
-    // 边界收敛：始终落在 1..total 之间
-    const target = Math.min(total, Math.max(1, page));
-    const startHeight = archive.getBoundingClientRect().height;
-
-    if (animate) archive.classList.add('paging');
-    window.setTimeout(() => {
-      for (const row of rows) {
-        row.hidden = Number(row.dataset.page) !== target;
+    function setDisabled(el: HTMLAnchorElement, disabled: boolean) {
+      if (disabled) {
+        el.setAttribute('aria-disabled', 'true');
+        el.setAttribute('tabindex', '-1');
+      } else {
+        el.removeAttribute('aria-disabled');
+        el.removeAttribute('tabindex');
       }
-      for (const el of numLinks) {
-        if (Number(el.dataset.page) === target) {
-          el.setAttribute('aria-current', 'page');
-        } else {
-          el.removeAttribute('aria-current');
+    }
+
+    function applyPage(page: number, animate: boolean): void {
+      if (busy) return;
+      // 边界收敛：始终落在 1..total 之间
+      const target = Math.min(total, Math.max(1, page));
+      const startHeight = archive.getBoundingClientRect().height;
+
+      if (animate) archive.classList.add('paging');
+      window.setTimeout(() => {
+        for (const row of rows) {
+          row.hidden = Number(row.dataset.page) !== target;
         }
-      }
-      setDisabled(prevBtn, target === 1);
-      setDisabled(nextBtn, target === total);
-
-      const url = new URL(window.location.href);
-      if (target === 1) url.searchParams.delete('page');
-      else url.searchParams.set('page', String(target));
-      window.history.replaceState(null, '', url);
-
-      if (animate) {
-        busy = true;
-        // 内容高度变化时，让页脚平滑跟随（FLIP 高度过渡）
-        const endHeight = archive.getBoundingClientRect().height;
-        if (endHeight !== startHeight) {
-          archive.style.height = `${startHeight}px`;
-          archive.style.overflow = 'hidden';
-          void archive.offsetHeight;
-          archive.style.height = `${endHeight}px`;
+        for (const el of numLinks) {
+          if (Number(el.dataset.page) === target) {
+            el.setAttribute('aria-current', 'page');
+          } else {
+            el.removeAttribute('aria-current');
+          }
         }
-        const cleanup = () => {
-          archive.style.height = '';
-          archive.style.overflow = '';
-          archive.removeEventListener('transitionend', cleanup);
-          busy = false;
-        };
-        archive.addEventListener('transitionend', (event) => {
-          if ((event as TransitionEvent).propertyName === 'height') cleanup();
-        });
-        requestAnimationFrame(() => archive.classList.remove('paging'));
-        // 兜底超时，防止 transitionend 丢失导致按钮卡住
-        window.setTimeout(cleanup, 500);
-      }
-    }, animate ? 180 : 0);
-  }
+        setDisabled(prevBtn, target === 1);
+        setDisabled(nextBtn, target === total);
 
-  nav.hidden = false;
-  for (const el of numLinks) {
-    el.addEventListener('click', (event) => {
+        const url = new URL(window.location.href);
+        if (target === 1) url.searchParams.delete('page');
+        else url.searchParams.set('page', String(target));
+        window.history.replaceState(null, '', url);
+
+        if (animate) {
+          busy = true;
+          // 内容高度变化时，让页脚平滑跟随（FLIP 高度过渡）
+          const endHeight = archive.getBoundingClientRect().height;
+          if (endHeight !== startHeight) {
+            archive.style.height = `${startHeight}px`;
+            archive.style.overflow = 'hidden';
+            void archive.offsetHeight;
+            archive.style.height = `${endHeight}px`;
+          }
+          const cleanup = () => {
+            archive.style.height = '';
+            archive.style.overflow = '';
+            archive.removeEventListener('transitionend', cleanup);
+            busy = false;
+          };
+          archive.addEventListener('transitionend', (event) => {
+            if ((event as TransitionEvent).propertyName === 'height') cleanup();
+          });
+          requestAnimationFrame(() => archive.classList.remove('paging'));
+          // 兜底超时，防止 transitionend 丢失导致按钮卡住
+          window.setTimeout(cleanup, 500);
+        }
+      }, animate ? 180 : 0);
+    }
+
+    nav.hidden = false;
+    for (const el of numLinks) {
+      el.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (!el.hasAttribute('aria-disabled')) {
+          applyPage(Number(el.dataset.page), true);
+        }
+      });
+    }
+    prevBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      if (!el.hasAttribute('aria-disabled')) {
-        applyPage(Number(el.dataset.page), true);
+      if (!prevBtn.hasAttribute('aria-disabled')) {
+        applyPage(currentPage() - 1, true);
       }
     });
+    nextBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!nextBtn.hasAttribute('aria-disabled')) {
+        applyPage(currentPage() + 1, true);
+      }
+    });
+    applyPage(currentPage(), false);
   }
-  prevBtn.addEventListener('click', (event) => {
-    event.preventDefault();
-    if (!prevBtn.hasAttribute('aria-disabled')) {
-      applyPage(currentPage() - 1, true);
-    }
-  });
-  nextBtn.addEventListener('click', (event) => {
-    event.preventDefault();
-    if (!nextBtn.hasAttribute('aria-disabled')) {
-      applyPage(currentPage() + 1, true);
-    }
-  });
-  applyPage(currentPage(), false);
+  document.addEventListener('astro:page-load', initPagination);
 </script>

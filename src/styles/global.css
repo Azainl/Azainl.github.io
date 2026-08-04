@@ -1143,6 +1143,49 @@ mark {
   transform: none;
 }
 
+/* 页面切换期间，未渐显的内容保持可见，避免换页时空白 */
+html[data-astro-transition] .reveal:not(.is-visible) {
+  opacity: 1;
+  transform: none;
+}
+
+/* ============================================================
+   页面切换动画（View Transitions）
+   ============================================================ */
+@keyframes vt-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+::view-transition-old(root) {
+  animation: vt-page-out 0.26s ease both;
+}
+
+::view-transition-new(root) {
+  animation: vt-page-in 0.32s ease both;
+}
+
+/* 共享元素（文章标题）的飞行动画：更柔和、更从容 */
+::view-transition-group(*) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -1157,5 +1200,12 @@ mark {
   .js .reveal {
     opacity: 1;
     transform: none;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

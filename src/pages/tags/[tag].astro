@@ -4,6 +4,7 @@ import { getCollection } from 'astro:content';
 import { SITE } from '../../consts';
 import { formatDateShort } from '../../utils/formatDate';
 import { tagDescription } from '../../data/tags';
+import { vtName } from '../../utils/vtName';
 
 export async function getStaticPaths() {
   const posts = await getCollection('posts', ({ data }) => !data.draft);
@@ -37,7 +38,9 @@ const posts = (
                 {formatDateShort(post.data.date)}
               </time>
               <div>
-                <h3>{post.data.title}</h3>
+                <h3 transition:name={vtName(post.slug)}>
+                  {post.data.title}
+                </h3>
                 <p>{post.data.description}</p>
               </div>
             </a>

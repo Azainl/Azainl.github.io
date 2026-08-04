@@ -6,6 +6,7 @@ import '../styles/global.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { SITE } from '../consts';
+import { ClientRouter } from 'astro:transitions';
 
 interface Props {
   title?: string;
@@ -40,6 +41,7 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     <meta property="og:locale" content="zh_CN" />
     <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
+    <ClientRouter />
     <script is:inline>
       (() => {
         document.documentElement.classList.add('js');
@@ -51,7 +53,7 @@ const ogImage = new URL('/og.svg', Astro.site).href;
       })();
     </script>
   </head>
-  <body>
+  <body data-path={Astro.url.pathname}>
     <Header />
     <main id="main">
       <slot />
@@ -59,6 +61,22 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     <Footer />
     <script>
       import '../scripts/reveal';
+    </script>
+    <script>
+      // 客户端路由兜底：导航后页面内容与 URL 不一致时强制整页刷新，
+      // 防止个别浏览器（或返回键场景）下路由交换失败导致页面空白。
+      function ensurePageMatchesUrl() {
+        const bodyPath = document.body?.getAttribute('data-path') ?? '';
+        if (bodyPath && bodyPath !== window.location.pathname) {
+          window.location.reload();
+        }
+      }
+      window.addEventListener('popstate', () => {
+        window.setTimeout(ensurePageMatchesUrl, 1200);
+      });
+      document.addEventListener('astro:page-load', () => {
+        window.setTimeout(ensurePageMatchesUrl, 100);
+      });
     </script>
   </body>
 </html>

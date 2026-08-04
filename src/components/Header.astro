@@ -78,133 +78,156 @@ const links = [
     formatDateCn,
     type PostIndex,
   } from '../scripts/search';
-
-  const container = document.getElementById('header-search')!;
-  const input = container.querySelector('input') as HTMLInputElement;
-  const popover = document.getElementById('search-popover')!;
-  const listEl = popover.querySelector('.search-popover-list') as HTMLUListElement;
-  const emptyEl = popover.querySelector(
-    '.search-popover-empty',
-  ) as HTMLParagraphElement;
-  const moreEl = popover.querySelector(
-    '.search-popover-more',
-  ) as HTMLAnchorElement;
+  import { vtName } from '../utils/vtName';
 
   let index: PostIndex[] = [];
-  let activeIndex = -1;
 
   buildIndex().then((data) => {
     index = data;
   });
 
-  function closePopover() {
-    popover.classList.remove('open');
-    activeIndex = -1;
-  }
+  /** 每次页面加载/切换后重新绑定页头交互（页头节点会被重建） */
+  function initHeader() {
+    const container = document.getElementById('header-search');
+    if (!container || container.dataset.inited) return;
+    container.dataset.inited = 'true';
 
-  function openPopover() {
-    if (input.value.trim()) popover.classList.add('open');
-  }
+    const input = container.querySelector('input') as HTMLInputElement;
+    const popover = document.getElementById('search-popover')!;
+    const listEl = popover.querySelector('.search-popover-list') as HTMLUListElement;
+    const emptyEl = popover.querySelector(
+      '.search-popover-empty',
+    ) as HTMLParagraphElement;
+    const moreEl = popover.querySelector(
+      '.search-popover-more',
+    ) as HTMLAnchorElement;
+    let activeIndex = -1;
 
-  function render(query: string) {
-    const items = searchIndex(index, query);
-    listEl.replaceChildren();
-    moreEl.hidden = true;
-    activeIndex = -1;
+    function closePopover() {
+      popover.classList.remove('open');
+      activeIndex = -1;
+    }
 
-    if (items.length === 0) {
-      emptyEl.hidden = false;
-      listEl.hidden = true;
-    } else {
-      emptyEl.hidden = true;
-      listEl.hidden = false;
-      for (const { post } of items.slice(0, 6)) {
-        const li = document.createElement('li');
-        const link = document.createElement('a');
-        link.className = 'search-popover-item';
-        link.href = `/posts/${post.slug}/`;
+    function render(query: string) {
+      const items = searchIndex(index, query);
+      listEl.replaceChildren();
+      moreEl.hidden = true;
+      activeIndex = -1;
 
-        const title = document.createElement('span');
-        title.className = 'search-popover-title';
-        highlight(title, post.title, query);
+      if (items.length === 0) {
+        emptyEl.hidden = false;
+        listEl.hidden = true;
+      } else {
+        emptyEl.hidden = true;
+        listEl.hidden = false;
+        for (const { post } of items.slice(0, 6)) {
+          const li = document.createElement('li');
+          const link = document.createElement('a');
+          link.className = 'search-popover-item';
+          link.href = `/posts/${post.slug}/`;
 
-        const meta = document.createElement('span');
-        meta.className = 'search-popover-meta';
-        meta.textContent = `${formatDateCn(post.date)}${
-          post.tags.length ? ` · ${post.tags.join(' / ')}` : ''
-        }`;
+          const title = document.createElement('span');
+          title.className = 'search-popover-title';
+          title.style.viewTransitionName = vtName(post.slug);
+          highlight(title, post.title, query);
 
-        link.append(title, meta);
-        li.appendChild(link);
-        listEl.appendChild(li);
+          const meta = document.createElement('span');
+          meta.className = 'search-popover-meta';
+          meta.textContent = `${formatDateCn(post.date)}${
+            post.tags.length ? ` · ${post.tags.join(' / ')}` : ''
+          }`;
+
+          link.append(title, meta);
+          li.appendChild(link);
+          listEl.appendChild(li);
+        }
+        const url = new URL('/search/', window.location.origin);
+        url.searchParams.set('q', query);
+        moreEl.href = url.toString();
+        moreEl.textContent = `查看全部 ${items.length} 条结果`;
+        moreEl.hidden = false;
       }
-      const url = new URL('/search/', window.location.origin);
-      url.searchParams.set('q', query);
-      moreEl.href = url.toString();
-      moreEl.textContent = `查看全部 ${items.length} 条结果`;
-      moreEl.hidden = false;
+      popover.classList.add('open');
     }
-    popover.classList.add('open');
-  }
 
-  let timer: number | undefined;
-  input.addEventListener('input', () => {
-    window.clearTimeout(timer);
-    const q = input.value.trim();
-    if (!q) {
-      closePopover();
-      return;
-    }
-    timer = window.setTimeout(() => render(q), 120);
-  });
-
-  input.addEventListener('focus', () => {
-    if (input.value.trim()) render(input.value.trim());
-  });
-
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      input.value = '';
-      closePopover();
-      return;
-    }
-    if (event.key === 'Enter') {
-      const items = listEl.querySelectorAll('.search-popover-item');
-      if (activeIndex >= 0 && items[activeIndex]) {
-        (items[activeIndex] as HTMLAnchorElement).click();
+    let timer: number | undefined;
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) {
+        closePopover();
         return;
       }
-      const hits = searchIndex(index, input.value.trim());
-      if (hits.length) {
-        window.location.href = `/posts/${hits[0].post.slug}/`;
-      } else {
-        const url = new URL('/search/', window.location.origin);
-        url.searchParams.set('q', input.value.trim());
-        window.location.href = url.toString();
+      timer = window.setTimeout(() => render(q), 120);
+    });
+
+    input.addEventListener('focus', () => {
+      if (input.value.trim()) render(input.value.trim());
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        input.value = '';
+        closePopover();
+        return;
       }
-      return;
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      const items = listEl.querySelectorAll('.search-popover-item');
-      if (!items.length) return;
-      event.preventDefault();
-      if (event.key === 'ArrowDown') {
-        activeIndex = Math.min(activeIndex + 1, items.length - 1);
-      } else {
-        activeIndex = Math.max(activeIndex - 1, 0);
+      if (event.key === 'Enter') {
+        const items = listEl.querySelectorAll('.search-popover-item');
+        if (activeIndex >= 0 && items[activeIndex]) {
+          (items[activeIndex] as HTMLAnchorElement).click();
+          return;
+        }
+        const hits = searchIndex(index, input.value.trim());
+        if (hits.length) {
+          window.location.href = `/posts/${hits[0].post.slug}/`;
+        } else {
+          const url = new URL('/search/', window.location.origin);
+          url.searchParams.set('q', input.value.trim());
+          window.location.href = url.toString();
+        }
+        return;
       }
-      items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
-      (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
-    }
-  });
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        const items = listEl.querySelectorAll('.search-popover-item');
+        if (!items.length) return;
+        event.preventDefault();
+        if (event.key === 'ArrowDown') {
+          activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        } else {
+          activeIndex = Math.max(activeIndex - 1, 0);
+        }
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+        (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    const toggle = document.getElementById('theme-toggle');
+    toggle?.addEventListener('click', () => {
+      const dark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+    });
+  }
+
+  // 客户端切换页面后，保持导航高亮与当前页一致
+  function updateNav() {
+    const path = window.location.pathname;
+    document.querySelectorAll('.site-nav a').forEach((a) => {
+      const href = a.getAttribute('href') || '/';
+      const active = href === '/' ? path === '/' : path.startsWith(href);
+      if (active) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+  }
 
   document.addEventListener('pointerdown', (event) => {
-    if (!container.contains(event.target as Node)) closePopover();
+    const container = document.getElementById('header-search');
+    if (container && !container.contains(event.target as Node)) {
+      document.getElementById('search-popover')?.classList.remove('open');
+    }
   });
 
-  const toggle = document.getElementById('theme-toggle');
-  toggle?.addEventListener('click', () => {
-    const dark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  document.addEventListener('astro:page-load', () => {
+    initHeader();
+    updateNav();
   });
 </script>
