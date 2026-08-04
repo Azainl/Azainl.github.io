@@ -370,10 +370,10 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 客户端导航到文章`, r.path === r.href && r.h1.length > 0, r.href.slice(0, 24));
   check(`${label}: 未整页刷新`, r.marker === 'alive');
   check(`${label}: 文章页无残留高亮`, r.navOnPost === '', r.navOnPost || '(none)');
-  check(`${label}: 返回按钮显示`, r.backVisible === true, `hasPrev=${r.backHasPrev}`);
+  check(`${label}: 返回按钮显示`, r.backVisible === true, String(r.backVisible));
   check(`${label}: 主题切换仍可用`, r.toggleWorks);
 
-  // 点击返回按钮回首页（客户端交换失败时兜底脚本会整页刷新，因此分阶段重试）
+  // 点击返回按钮回首页（站内导航栈 + 客户端路由，不应整页刷新）
   await evaluate(cdp, `document.getElementById('back-button').click(); 'ok'`);
   let home = null;
   for (let i = 0; i < 10 && !home; i++) {
@@ -382,12 +382,14 @@ await runPage(`${BASE}/`, async (cdp, label) => {
         if (location.pathname !== '/' || !document.querySelectorAll('.post-row').length) return null;
         return {
           navOnHome: document.querySelector('.site-nav a[aria-current="page"]')?.textContent?.trim() || '',
+          marker: window.__vtMarker,
         };
       })()`);
     } catch {}
     if (!home) await sleep(1000);
   }
   check(`${label}: 返回首页`, !!home, home ? home.navOnHome : '(未返回)');
+  check(`${label}: 返回未整页刷新`, home?.marker === 'alive', String(home?.marker));
   check(`${label}: 返回后导航高亮恢复`, home?.navOnHome === '首页', home?.navOnHome || '(none)');
 
   let pageTurn = null;
@@ -425,16 +427,15 @@ await runPage(`${BASE}/posts/hello-world/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
     const btn = document.getElementById('back-button');
     const visible = !btn.hidden;
-    const hasPrev = btn.dataset.hasPrev;
     btn.click();
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 100));
       if (location.pathname === '/') break;
     }
     await new Promise((r) => setTimeout(r, 500));
-    return { visible, hasPrev, path: location.pathname };
+    return { visible, path: location.pathname };
   })()`);
-  check(`${label}: 文章页显示且无站内历史`, r.visible === true && r.hasPrev === 'false', `hasPrev=${r.hasPrev}`);
+  check(`${label}: 文章页显示返回按钮`, r.visible === true);
   check(`${label}: 点击回首页`, r.path === '/', r.path);
 }, '返回按钮-文章页直进');
 
