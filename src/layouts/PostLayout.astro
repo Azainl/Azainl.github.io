@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import type { CollectionEntry } from 'astro:content';
+import { Icon } from 'astro-icon/components';
 import { SITE } from '../consts';
 import { formatDate } from '../utils/formatDate';
 import { readingTime } from '../utils/readingTime';
@@ -21,6 +22,15 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
 <BaseLayout title={pageTitle} description={post.data.description}>
   <article class="post">
     <header class="post-header reveal">
+      <button
+        class="post-back"
+        id="back-button"
+        type="button"
+        aria-label="返回上一页"
+      >
+        <Icon name="arrow-left" size={15} />
+        <span>返回</span>
+      </button>
       <p class="post-meta">
         <time datetime={post.data.date.toISOString()}>
           {formatDate(post.data.date)}

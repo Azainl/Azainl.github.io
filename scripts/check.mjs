@@ -420,9 +420,9 @@ await runPage(`${BASE}/`, async (cdp, label) => {
 
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
-    hidden: document.getElementById('back-button')?.hidden,
+    exists: !!document.getElementById('back-button'),
   }))()`);
-  check(`${label}: 首页隐藏返回按钮`, r.hidden === true, String(r.hidden));
+  check(`${label}: 首页无返回按钮`, r.exists === false, String(r.exists));
 }, '返回按钮-首页');
 
 await runPage(`${BASE}/posts/hello-world/`, async (cdp, label) => {
