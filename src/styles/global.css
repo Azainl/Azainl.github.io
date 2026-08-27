@@ -679,11 +679,14 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 0.625rem;
-  align-items: baseline;
+  align-items: center;
 }
 
 .tag-cloud .tag {
-  padding: 0.3rem 0.85rem;
+  padding: 0.35rem 0.9rem;
+  line-height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
   transition: color 0.15s ease, border-color 0.15s ease,
     transform 0.12s ease;
 }
