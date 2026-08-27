@@ -159,7 +159,13 @@ const yearGroupReveal = (index: number) =>
         const url = new URL(window.location.href);
         if (target === 1) url.searchParams.delete('page');
         else url.searchParams.set('page', String(target));
-        window.history.replaceState(null, '', url);
+        // 保留 Astro View Transitions 的 history.state（含 index），并写入当前滚动，
+        // 让 Astro 自带的滚动保留（onscrollend）与返回恢复正常工作。
+        window.history.replaceState(
+          { ...(history.state ?? {}), scrollX: window.scrollX, scrollY: window.scrollY },
+          '',
+          url,
+        );
 
         if (animate) {
           busy = true;

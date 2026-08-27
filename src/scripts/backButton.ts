@@ -1,10 +1,11 @@
 /**
  * 悬浮返回按钮：右下角圆钮，样式不占用顶部栏，顶部栏布局恒定。
- * 仅非首页显示；有站内历史则返回上一路径，否则回首页。
- * 通过合成的站内链接触发客户端路由，保留页面切换动画。
+ * 仅非首页显示；点击走 history.back()（浏览器历史），让 Astro 的 View
+ * Transitions 恢复原滚动位置并以 back 方向运行动画，真正"从哪来回哪去"。
+ *
+ * 滚动位置的"从哪来回哪去"由 Astro 自带的 View Transitions 滚动保留
+ * （history.state.scrollX/scrollY）负责，这里不再需要手动保存/恢复。
  */
-import './scrollPosition';
-
 // 站内返回栈：记录每次访问的路径，返回按钮据此导航
 const STACK_KEY = 'blog-back-stack';
 const MAX_STACK = 20;
@@ -44,28 +45,18 @@ function initBackButton(): void {
 
   btn.addEventListener('click', () => {
     const stack = readStack();
-    let target: string | null = null;
-    while (stack.length) {
-      const candidate = stack.pop();
-      if (candidate !== window.location.pathname + window.location.search) {
-        target = candidate;
-        break;
-      }
+    const cur = window.location.pathname + window.location.search;
+    // 存在可返回的站内上一条路径时，用 history.back() 走浏览器历史：
+    // Astro 的 View Transitions 会据此恢复原滚动位置并以 back 方向运行动画。
+    const hasBackTarget = stack.some((p) => p !== cur);
+    if (hasBackTarget) {
+      window.history.back();
+      return;
     }
-    writeStack(stack);
-    if (target) {
-      // 用合成的站内链接点击触发客户端路由，确保带页面切换动画
-      const link = document.createElement('a');
-      link.href = target;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } else {
-      const home = document.querySelector('.wordmark') as HTMLAnchorElement | null;
-      if (home) home.click();
-      else window.location.href = '/';
-    }
+    // 无站内历史（例如直接进入文章页）：回首页
+    const home = document.querySelector('.wordmark') as HTMLAnchorElement | null;
+    if (home) home.click();
+    else window.location.href = '/';
   });
 }
 
