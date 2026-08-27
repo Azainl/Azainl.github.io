@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 
 const CHROME =
   'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const BASE = 'http://127.0.0.1:4321';
+const BASE = 'http://localhost:4321';
 const PORT = 9222;
 const OUT = 'D:/Code/blog/.shots';
 

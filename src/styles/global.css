@@ -226,31 +226,48 @@ a {
   gap: 0.5rem;
 }
 
-/* 左上角返回按钮 */
+/* 右下角悬浮返回按钮（不占用顶部栏，顶部栏布局恒定） */
 .back-button {
-  width: 2.25rem;
-  height: 2.25rem;
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 40;
+  width: 2.75rem;
+  height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.15s ease, border-color 0.15s ease,
-    transform 0.1s ease;
+  box-shadow: var(--shadow), 0 6px 20px rgba(26, 26, 30, 0.12);
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .back-button:hover {
   color: var(--accent);
   border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(26, 26, 30, 0.16);
 }
 
 .back-button:active {
   transform: scale(0.94);
+}
+
+/* 确保 hidden 属性（首页隐藏）可靠生效，不被上面 display 覆盖 */
+.back-button[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-button {
+    transition: none;
+  }
 }
 
 /* 页头搜索框 */

@@ -8,3 +8,4 @@ dist/
 .chrome-tmp*/
 *.log
 .DS_Store
+.reasonix/

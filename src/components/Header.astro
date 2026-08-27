@@ -15,16 +15,6 @@ const links = [
 
 <header class="site-header">
   <div class="header-inner">
-    <button
-      class="back-button"
-      id="back-button"
-      type="button"
-      aria-label="返回上一页"
-      title="返回上一页"
-      hidden
-    >
-      <Icon name="arrow-left" />
-    </button>
     <a class="wordmark" href="/" aria-label="{SITE.name} 首页">
       Az<span>ain</span>
     </a>
@@ -96,34 +86,6 @@ const links = [
   buildIndex().then((data) => {
     index = data;
   });
-
-  // 站内返回栈：记录每次访问的路径，返回按钮据此导航（带动画）
-  const STACK_KEY = 'blog-back-stack';
-  const MAX_STACK = 20;
-
-  function readStack(): string[] {
-    try {
-      const raw = sessionStorage.getItem(STACK_KEY);
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function writeStack(stack: string[]): void {
-    try {
-      sessionStorage.setItem(STACK_KEY, JSON.stringify(stack.slice(-MAX_STACK)));
-    } catch {}
-  }
-
-  function recordCurrent(): void {
-    const path = window.location.pathname + window.location.search;
-    const stack = readStack();
-    if (stack[stack.length - 1] !== path) {
-      stack.push(path);
-      writeStack(stack);
-    }
-  }
 
   /** 每次页面加载/切换后重新绑定页头交互（页头节点会被重建） */
   function initHeader() {
@@ -245,37 +207,6 @@ const links = [
       const dark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     });
-
-    // 左上角返回按钮：非首页显示；有站内历史则返回上一页，否则回首页
-    const backBtn = document.getElementById('back-button');
-    if (backBtn) {
-      backBtn.hidden = window.location.pathname === '/';
-      backBtn.addEventListener('click', () => {
-        const stack = readStack();
-        let target: string | null = null;
-        while (stack.length) {
-          const candidate = stack.pop();
-          if (candidate !== window.location.pathname + window.location.search) {
-            target = candidate;
-            break;
-          }
-        }
-        writeStack(stack);
-        if (target) {
-          // 用合成的站内链接点击触发客户端路由，确保带页面切换动画
-          const link = document.createElement('a');
-          link.href = target;
-          link.style.display = 'none';
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        } else {
-          const homeLink = document.querySelector('.wordmark') as HTMLAnchorElement | null;
-          if (homeLink) homeLink.click();
-          else window.location.href = '/';
-        }
-      });
-    }
   }
 
   // 客户端切换页面后，保持导航高亮与当前页一致
@@ -297,7 +228,6 @@ const links = [
   });
 
   document.addEventListener('astro:page-load', () => {
-    recordCurrent();
     initHeader();
     updateNav();
   });

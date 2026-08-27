@@ -2,7 +2,8 @@
 import { spawn } from 'node:child_process';
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const BASE = 'http://127.0.0.1:4321';
+// preview 默认绑定 IPv6 localhost，浏览器/Node fetch 经 Local host 才能访问到
+const BASE = 'http://localhost:4321';
 const PORT = 9223;
 
 const chrome = spawn(CHROME, [
