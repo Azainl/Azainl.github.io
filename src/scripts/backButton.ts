@@ -1,10 +1,6 @@
 /**
- * 悬浮返回按钮：右下角圆钮，样式不占用顶部栏，顶部栏布局恒定。
- * 仅非首页显示；点击走 history.back()（浏览器历史），让 Astro 的 View
- * Transitions 恢复原滚动位置并以 back 方向运行动画，真正"从哪来回哪去"。
- *
- * 滚动位置的"从哪来回哪去"由 Astro 自带的 View Transitions 滚动保留
- * （history.state.scrollX/scrollY）负责，这里不再需要手动保存/恢复。
+ * 文章页标题上方的返回按钮：点击走 history.back()（浏览器历史），让 Astro 的
+ * View Transitions 恢复原滚动位置并以 back 方向运行动画 —— "从哪来回哪去"。
  */
 // 站内返回栈：记录每次访问的路径，返回按钮据此导航
 const STACK_KEY = 'blog-back-stack';
@@ -34,7 +30,7 @@ function recordCurrent(): void {
   }
 }
 
-// 每次页面就绪后：记录路径、绑定悬浮按钮
+// 每次页面就绪后：记录路径、绑定返回按钮
 function initBackButton(): void {
   const btn = document.getElementById('back-button');
   if (!btn || btn.dataset.inited) return;
