@@ -8,6 +8,7 @@ export const TAG_DESCRIPTIONS: Record<string, string> = {
   写作: '写作方法与长期练习',
   工具: '效率工具与使用技巧',
   效率: '让工作更高效的方法',
+  性能优化: '页面加载与构建产物的优化实践',
 };
 
 export function tagDescription(tag: string): string {
