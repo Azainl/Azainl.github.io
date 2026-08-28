@@ -680,6 +680,9 @@ a {
   flex-wrap: wrap;
   gap: 0.625rem;
   align-items: center;
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
 .tag-cloud .tag {
@@ -699,23 +702,6 @@ a {
   color: var(--ink-3);
   margin-left: 0.35rem;
   font-size: 0.75em;
-}
-
-/* 按文章数量分级：数量越多字号越大 */
-.tag-size-1 {
-  font-size: 0.8125rem;
-}
-
-.tag-size-2 {
-  font-size: 0.9rem;
-}
-
-.tag-size-3 {
-  font-size: 1rem;
-}
-
-.tag-size-4 {
-  font-size: 1.125rem;
 }
 
 .tag-current {

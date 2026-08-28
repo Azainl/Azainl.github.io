@@ -446,22 +446,13 @@ await runPage(`${BASE}/tags/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     tags: document.querySelectorAll('.tag-cloud .tag').length,
     counts: [...document.querySelectorAll('.tag-cloud .count')].map((e) => e.textContent),
-    badSizes: [...document.querySelectorAll('.tag-cloud .tag')]
-      .filter((a) => {
-        const count = Number(a.querySelector('.count')?.textContent || 0);
-        const size = Number(a.className.match(/tag-size-([0-9])/)?.[1]);
-        return size !== Math.min(4, count);
-      })
-      .map(
-        (a) =>
-          a.textContent +
-          '=>size-' +
-          (a.className.match(/tag-size-([0-9])/)?.[1] || ''),
-      ),
+    sizes: [...new Set([...document.querySelectorAll('.tag-cloud .tag')].map(
+      (a) => getComputedStyle(a).fontSize,
+    ))],
   }))()`);
   check(`${label}: 标签云渲染`, r.tags >= 8, `${r.tags} 个标签`);
   check(`${label}: 标签带数量`, r.counts.every((c) => /^\d+$/.test(c)), r.counts.join(','));
-  check(`${label}: 分级与文章数一致`, r.badSizes.length === 0, r.badSizes.join(','));
+  check(`${label}: 标签字号统一`, r.sizes.length === 1, r.sizes.join(','));
 }, '标签总览');
 
 await runPage(`${BASE}/`, async (cdp, label) => {

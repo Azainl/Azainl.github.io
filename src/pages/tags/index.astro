@@ -27,16 +27,13 @@ const tags = [...counts.entries()].sort(
   <div class="container reveal" style="padding-bottom: 5rem; --reveal-delay: 80ms">
     <ul class="tag-cloud">
       {
-        tags.map(([tag, count]) => {
-          const size = Math.min(4, count);
-          return (
-            <li>
-              <a class={`tag tag-size-${size}`} href={`/tags/${tag}/`}>
-                #{tag}<span class="count">{count}</span>
-              </a>
-            </li>
-          );
-        })
+        tags.map(([tag, count]) => (
+          <li>
+            <a class="tag" href={`/tags/${tag}/`}>
+              #{tag}<span class="count">{count}</span>
+            </a>
+          </li>
+        ))
       }
     </ul>
   </div>
