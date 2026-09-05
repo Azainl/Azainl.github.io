@@ -1,31 +1,36 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getCollection } from 'astro:content';
 import { SITE } from '../../consts';
 import { formatDateShort } from '../../utils/formatDate';
-import { tagDescription } from '../../data/tags';
+import { tagDescription, tagSlug } from '../../data/tags';
 import { vtName } from '../../utils/vtName';
+import { url } from '../../utils/url';
+import { getPublishedPosts } from '../../utils/posts';
 
 export async function getStaticPaths() {
-  const posts = await getCollection('posts', ({ data }) => !data.draft);
+  const posts = await getPublishedPosts();
   const tags = new Set(posts.flatMap((post) => post.data.tags));
-  return [...tags].map((tag) => ({ params: { tag } }));
+  // URL 用英文 slug，展示名通过 props 传过去
+  return [...tags].map((tag) => ({
+    params: { tag: tagSlug(tag) },
+    props: { name: tag },
+  }));
 }
 
-const { tag } = Astro.params;
-const posts = (
-  await getCollection('posts', ({ data }) => !data.draft && data.tags.includes(tag!))
-).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+const { name } = Astro.props;
+const posts = (await getPublishedPosts()).filter((post) =>
+  post.data.tags.includes(name),
+);
 ---
 
 <BaseLayout
-  title={`#${tag} · ${SITE.name}`}
-  description={`标签「${tag}」下的全部文章。`}
+  title={`#${name} · ${SITE.name}`}
+  description={`标签「${name}」下的全部文章。`}
 >
   <div class="page-head reveal">
     <p class="post-meta">标签</p>
-    <h1>#{tag}</h1>
-    <p>{tagDescription(tag!)} · 共 {posts.length} 篇文章</p>
+    <h1>#{name}</h1>
+    <p>{tagDescription(name)} · 共 {posts.length} 篇文章</p>
   </div>
 
   <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
@@ -33,7 +38,7 @@ const posts = (
       {
         posts.map((post) => (
           <li class="post-row">
-            <a href={`/posts/${post.slug}/`}>
+            <a href={url(`/posts/${post.slug}/`)}>
               <time datetime={post.data.date.toISOString()}>
                 {formatDateShort(post.data.date)}
               </time>
@@ -50,8 +55,8 @@ const posts = (
                   {post.data.tags.map((t) => (
                     <li>
                       <a
-                        class={`tag${t === tag ? ' tag-current' : ''}`}
-                        href={`/tags/${t}/`}
+                        class={`tag${t === name ? ' tag-current' : ''}`}
+                        href={url(`/tags/${tagSlug(t)}/`)}
                       >
                         #{t}
                       </a>
@@ -65,7 +70,7 @@ const posts = (
       }
     </ol>
     <p class="back-row">
-      <a class="back-link" href="/tags/">← 全部标签</a>
+      <a class="back-link" href={url('/tags/')}>← 全部标签</a>
     </p>
   </section>
 </BaseLayout>

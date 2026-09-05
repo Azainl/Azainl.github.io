@@ -3,6 +3,9 @@
  * View Transitions 恢复原滚动位置并以 back 方向运行动画 —— "从哪来回哪去"。
  */
 // 站内返回栈：记录每次访问的路径，返回按钮据此导航
+import { isHome } from '../utils/url';
+import { onPageLoad } from './lifecycle';
+
 const STACK_KEY = 'blog-back-stack';
 const MAX_STACK = 20;
 
@@ -37,7 +40,7 @@ function initBackButton(): void {
   btn.dataset.inited = 'true';
 
   // 首页不显示返回按钮（回到站点根时没有上一层）
-  btn.hidden = window.location.pathname === '/';
+  btn.hidden = isHome(window.location.pathname);
 
   btn.addEventListener('click', () => {
     const stack = readStack();
@@ -57,9 +60,7 @@ function initBackButton(): void {
 }
 
 // 客户端切换页面后，记录当前路径进栈（用于返回）并重新绑定按钮
-document.addEventListener('astro:page-load', () => {
+onPageLoad(() => {
   recordCurrent();
   initBackButton();
 });
-
-export {};

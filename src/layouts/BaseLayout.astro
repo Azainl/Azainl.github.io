@@ -4,6 +4,7 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { SITE } from '../consts';
 import { ClientRouter } from 'astro:transitions';
+import { url } from '../utils/url';
 
 // 只引入拉丁子集的可变字体，避免下载无用字符集
 import geistUrl from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
@@ -29,15 +30,18 @@ const fontFaces = `
 interface Props {
   title?: string;
   description?: string;
+  /** 是否为 404 页：用于跳过"路径校验"兜底刷新（见下方 ensurePageMatchesUrl） */
+  notFound?: boolean;
 }
 
 const {
   title = SITE.title,
   description = SITE.description,
+  notFound = false,
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
-const ogImage = new URL('/og.svg', Astro.site).href;
+const ogImage = new URL(url('/og.svg'), Astro.site).href;
 ---
 
 <!doctype html>
@@ -48,11 +52,14 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" type="application/rss+xml" title={SITE.title} href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title={SITE.title} href={url('/rss.xml')} />
     <link rel="preload" href={geistUrl} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={serifUrl} as="font" type="font/woff2" crossorigin />
+    {/* @font-face 必须和 preload 一起放在 head 里，否则字体声明解析晚于预加载，
+        FOIT/FOUT 行为不可控 */}
+    <style is:inline set:html={fontFaces}></style>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={title} />
@@ -72,8 +79,10 @@ const ogImage = new URL('/og.svg', Astro.site).href;
         if (dark) document.documentElement.classList.add('dark');
       })();
     </script>
+    {/* 各页面可选的 JSON-LD 结构化数据（文章页会塞 BlogPosting） */}
+    <slot name="ld" />
   </head>
-  <body data-path={Astro.url.pathname}>
+  <body data-path={Astro.url.pathname} data-notfound={notFound ? '' : undefined}>
     <Header />
     <main id="main">
       <slot />
@@ -89,6 +98,9 @@ const ogImage = new URL('/og.svg', Astro.site).href;
       // 客户端路由兜底：导航后页面内容与 URL 不一致时强制整页刷新，
       // 防止个别浏览器（或返回键场景）下路由交换失败导致页面空白。
       function ensurePageMatchesUrl() {
+        // 404 页的 body 固定是 /404，而浏览器地址栏是被访问的缺失路径，
+        // 二者天然不一致——若在此触发 reload 会陷入无限刷新，必须跳过。
+        if (document.body?.hasAttribute('data-notfound')) return;
         const bodyPath = document.body?.getAttribute('data-path') ?? '';
         if (bodyPath && bodyPath !== window.location.pathname) {
           window.location.reload();
@@ -111,5 +123,3 @@ const ogImage = new URL('/og.svg', Astro.site).href;
     </script>
   </body>
 </html>
-
-<style is:inline set:html={fontFaces}></style>

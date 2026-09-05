@@ -1,4 +1,6 @@
 /** 滚动进入视口时渐显（stagger），JS 不可用时内容保持可见 */
+import { onPageLoad } from './lifecycle';
+
 function initReveal() {
   const elements = [...document.querySelectorAll('.reveal:not(.is-visible)')];
   if (!elements.length) return;
@@ -32,4 +34,4 @@ function initReveal() {
   }
 }
 
-document.addEventListener('astro:page-load', initReveal);
+onPageLoad(initReveal);

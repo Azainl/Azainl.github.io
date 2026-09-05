@@ -1,11 +1,9 @@
 import rss from '@astrojs/rss';
-import { getCollection } from 'astro:content';
 import { SITE } from '../consts';
+import { getPublishedPosts } from '../utils/posts';
 
 export async function GET(context) {
-  const posts = (
-    await getCollection('posts', ({ data }) => !data.draft)
-  ).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+  const posts = await getPublishedPosts();
 
   return rss({
     title: SITE.title,
@@ -15,8 +13,10 @@ export async function GET(context) {
       title: post.data.title,
       pubDate: post.data.date,
       description: post.data.description,
-      link: `/posts/${post.slug}/`,
+      link: new URL(`/posts/${post.slug}/`, context.site).href,
+      categories: post.data.tags,
     })),
     customData: '<language>zh-cn</language>',
+    lastBuildDate: new Date(),
   });
 }

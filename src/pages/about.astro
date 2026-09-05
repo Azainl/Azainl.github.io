@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
+import { url } from '../utils/url';
 ---
 
 <BaseLayout
@@ -32,7 +33,7 @@ import { SITE } from '../consts';
 
     <h2>订阅</h2>
     <p>
-      可以订阅 <a href="/rss.xml">RSS</a>，有新文章时会第一时间同步。
+      可以订阅 <a href={url('/rss.xml')}>RSS</a>，有新文章时会第一时间同步。
     </p>
   </div>
 </BaseLayout>

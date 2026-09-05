@@ -1,9 +1,10 @@
-import { getCollection } from 'astro:content';
+import { getPublishedPosts } from '../utils/posts';
 
 /** 把 Markdown 正文转成适合搜索的纯文本 */
 function stripMarkdown(md: string): string {
   return md
-    .replace(/```[^\n]*\n?/g, ' ') // 去掉代码围栏标记，保留代码内容
+    .replace(/```[\s\S]*?```/g, ' ') // 成对剔除代码块（含闭合围栏）
+    .replace(/`[^`]*`/g, ' ') // 行内代码
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // 图片保留 alt 文字
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // 链接保留文字
     .replace(/^#{1,6}\s*/gm, '') // 标题符号
@@ -18,9 +19,7 @@ function stripMarkdown(md: string): string {
 }
 
 export async function GET() {
-  const posts = (
-    await getCollection('posts', ({ data }) => !data.draft)
-  ).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+  const posts = await getPublishedPosts();
 
   const items = posts.map((post) => ({
     slug: post.slug,
@@ -28,10 +27,14 @@ export async function GET() {
     description: post.data.description,
     date: post.data.date.toISOString(),
     tags: post.data.tags,
-    content: stripMarkdown(post.body),
+    // 索引只需要够搜索用，正文截断避免文件随文章数线性膨胀
+    content: stripMarkdown(post.body).slice(0, 2000),
   }));
 
   return new Response(JSON.stringify(items), {
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    },
   });
 }

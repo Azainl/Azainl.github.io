@@ -1,24 +1,21 @@
 ---
-import { getCollection } from 'astro:content';
 import PostLayout from '../../layouts/PostLayout.astro';
+import { getPublishedPosts } from '../../utils/posts';
 
 export async function getStaticPaths() {
-  const posts = await getCollection('posts', ({ data }) => !data.draft);
-  return posts.map((post) => ({
+  const posts = await getPublishedPosts();
+  // 邻接关系在这里一次算好，避免每篇文章各自全量排序 + 查找
+  return posts.map((post, i) => ({
     params: { slug: post.slug },
-    props: { post },
+    props: {
+      post,
+      newer: i > 0 ? posts[i - 1] : null,
+      older: i < posts.length - 1 ? posts[i + 1] : null,
+    },
   }));
 }
 
-const { post } = Astro.props;
-
-const posts = (
-  await getCollection('posts', ({ data }) => !data.draft)
-).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
-
-const index = posts.findIndex((p) => p.id === post.id);
-const next = index > 0 ? posts[index - 1] : null;
-const prev = index >= 0 && index < posts.length - 1 ? posts[index + 1] : null;
+const { post, newer, older } = Astro.props;
 ---
 
-<PostLayout post={post} prev={prev} next={next} />
+<PostLayout post={post} newer={newer} older={older} />

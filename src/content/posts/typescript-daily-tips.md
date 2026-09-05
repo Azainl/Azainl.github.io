@@ -35,14 +35,20 @@ type PostSummary = Pick<Post, 'id' | 'title' | 'tags'>;
 type NewPost = Omit<Post, 'id'>;
 ```
 
-## 利用返回类型推断
+## 让返回值自动推断
 
-函数的返回值能自动推断时，别再手写一遍几乎一样的类型。改参数，返回类型跟着变，少一处维护：
+函数返回什么类型，能让 TS 推断就别手写。这样改了内部逻辑，返回类型跟着变，少一处要同步维护的地方：
 
 ```ts
-// 不需要: const map: Record<number, string> = ...
-const map = new Map();
+function parseTime(input: string) {
+  const [h, m] = input.split(':').map(Number);
+  return { h, m }; // 返回类型被推断为 { h: number; m: number }
+}
+
+const t = parseTime('09:30'); // t 的类型自动是 { h: number; m: number }
 ```
+
+手写 `: { h: number; m: number }` 不仅多余，改了返回结构还得记得一起改——推断替你省了这道工序。
 
 ## 用类型守卫收窄
 

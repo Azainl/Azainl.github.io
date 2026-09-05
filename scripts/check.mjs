@@ -1,9 +1,14 @@
 // 临时验证脚本：在真实浏览器环境里对页面做布局与功能断言。
+// 用法：先在另一个终端跑 `npm run dev`（或 `npm run preview`），再执行 `npm run check`
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const ROOT = dirname(fileURLToPath(new URL('..', import.meta.url)));
+// 可用 CHROME_BIN 环境变量覆写 Chrome 路径，否则用默认安装位置
+const CHROME = process.env.CHROME_BIN || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 // preview 默认绑定 IPv6 localhost，浏览器/Node fetch 经 Local host 才能访问到
-const BASE = 'http://localhost:4321';
+const BASE = process.env.BASE_URL || 'http://localhost:4321';
 const PORT = 9223;
 
 const chrome = spawn(CHROME, [
@@ -12,7 +17,7 @@ const chrome = spawn(CHROME, [
   '--no-first-run',
   '--no-default-browser-check',
   `--remote-debugging-port=${PORT}`,
-  '--user-data-dir=D:/Code/blog/.chrome-tmp2',
+  `--user-data-dir=${ROOT}/.chrome-tmp2`,
   'about:blank',
 ]);
 
@@ -196,7 +201,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => {
     const tags = [...document.querySelectorAll('.post-row .tag')];
     const cs = tags.length ? getComputedStyle(tags[0]) : null;
-    const page1Count = document.querySelectorAll('.post-row[data-page="1"]').length;
+    const page1Count = document.querySelectorAll('.post-row').length;
     return {
       nested: document.querySelectorAll('.post-row a a').length,
       tagCount: tags.length,
@@ -216,11 +221,11 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 翻页控件显示`, r.navVisible);
 }, '首页标签与翻页');
 
-await runPage(`${BASE}/?page=2`, async (cdp, label) => {
+await runPage(`${BASE}/page/2`, async (cdp, label) => {
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
   const r = await evaluate(cdp, `(() => {
     const total = Number(document.getElementById('pagination').dataset.total);
-    const page2Count = document.querySelectorAll('.post-row[data-page="2"]').length;
+    const page2Count = document.querySelectorAll('.post-row').length;
     const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
     const active = document.querySelector('.page-number[aria-current="page"]');
     const prev = document.querySelector('[data-dir="prev"]');
@@ -232,58 +237,50 @@ await runPage(`${BASE}/?page=2`, async (cdp, label) => {
       activePage: active?.dataset.page || '',
       prevDisabled: prev.hasAttribute('aria-disabled'),
       nextDisabled: next.hasAttribute('aria-disabled'),
-      url: location.search,
+      path: location.pathname,
     };
   })()`);
   check(`${label}: 第 2 页文章数`, r.visible === r.page2Count && r.page2Count > 0, `共 ${r.total} 页，第 2 页 ${r.visible} 篇`);
   check(`${label}: 当前页码高亮`, r.activePage === '2', r.activePage);
   check(`${label}: 上一页可用`, r.prevDisabled === false);
   check(`${label}: 下一页可用`, r.nextDisabled === false);
-  check(`${label}: URL 页码`, r.url === '?page=2', r.url);
+  check(`${label}: URL 静态分页`, r.path === '/page/2/', r.path);
 }, '首页翻页-第2页');
 
-await runPage(`${BASE}/?page=999`, async (cdp, label) => {
-  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
-  const r = await evaluate(cdp, `(() => {
-    const total = Number(document.getElementById('pagination').dataset.total);
-    const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
-    const active = document.querySelector('.page-number[aria-current="page"]');
-    const next = document.querySelector('[data-dir="next"]');
-    return {
-      total,
-      visible,
-      activePage: active?.dataset.page || '',
-      nextDisabled: next.hasAttribute('aria-disabled'),
-      url: location.search,
-    };
-  })()`);
-  check(`${label}: 越界回退到末页`, r.activePage === String(r.total) && r.visible > 0, `末页=${r.activePage} 篇数=${r.visible}`);
-  check(`${label}: 下一页禁用`, r.nextDisabled);
-  check(`${label}: URL 收敛`, r.url === `?page=${r.total}`, r.url);
+// 超出范围的分页地址应返回 404 页面（静态分页没有"回退到末页"的逻辑）
+await runPage(`${BASE}/page/999`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => ({
+    title: document.title,
+    h1: document.querySelector('h1')?.textContent.trim(),
+    hasArchive: !!document.querySelector('.archive'),
+  }))()`);
+  check(`${label}: 返回 404 页`, r.h1 === '页面走丢了', r.h1);
+  check(`${label}: 无文章列表`, r.hasArchive === false);
 }, '首页翻页-越界');
 
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
-    const page2Count = document.querySelectorAll('.post-row[data-page="2"]').length;
+    const page2Count = document.querySelectorAll('.post-row').length;
     document.querySelector('.page-number[data-page="2"]').click();
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 600));
     const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
     return {
       visibleRows: rows.length,
       page2Count,
-      url: location.search,
+      path: location.pathname,
       paging: document.querySelector('.archive').classList.contains('paging'),
     };
   })()`);
   check(`${label}: 点击翻页`, r.visibleRows === r.page2Count && r.page2Count > 0, `${r.visibleRows} 篇`);
-  check(`${label}: 动画结束恢复`, r.paging === false);
+  check(`${label}: 跳转到 /page/2/`, r.path === '/page/2/', r.path);
+  check(`${label}: 无残留 paging 类`, r.paging === false);
 }, '首页翻页-点击');
 
-await runPage(`${BASE}/?page=1`, async (cdp, label) => {
+await runPage(`${BASE}/`, async (cdp, label) => {
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 300))`);
   const r = await evaluate(cdp, `(async () => {
     const prev = document.querySelector('[data-dir="prev"]');
-    const page1Count = document.querySelectorAll('.post-row[data-page="1"]').length;
+    const page1Count = document.querySelectorAll('.post-row').length;
     prev.click();
     await new Promise((r) => setTimeout(r, 300));
     const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
@@ -307,33 +304,44 @@ await runPage(`${BASE}/?page=1`, async (cdp, label) => {
   );
 }, '翻页边界-首页');
 
-await runPage(`${BASE}/?page=999`, async (cdp, label) => {
-  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
-  const r = await evaluate(cdp, `(async () => {
-    const next = document.querySelector('[data-dir="next"]');
-    const total = Number(document.getElementById('pagination').dataset.total);
-    const lastCount = document.querySelectorAll('.post-row[data-page="' + total + '"]').length;
-    next.click();
-    await new Promise((r) => setTimeout(r, 300));
-    const rows = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden);
-    return {
-      visibleRows: rows.length,
-      lastCount,
-      total,
-      nextDisabled: next.getAttribute('aria-disabled'),
-    };
-  })()`);
-  check(
-    `${label}: 末页点下一页不越界`,
-    r.visibleRows === r.lastCount && r.lastCount > 0,
-    `末页=${r.total} 篇数=${r.visibleRows}`,
+// 末页：先取总页数，再直接访问 /page/{total} 验证下一页禁用
+{
+  const totalTab = await fetch(
+    `http://127.0.0.1:${PORT}/json/new?${encodeURIComponent(`${BASE}/`)}`,
+    { method: 'PUT' },
+  ).then((r) => r.json());
+  const totalCdp = connect(totalTab.webSocketDebuggerUrl);
+  await totalCdp.ready;
+  await totalCdp.send('Page.enable');
+  await totalCdp.send('Page.navigate', { url: `${BASE}/` });
+  await sleep(800);
+  const totalPages = await evaluate(
+    totalCdp,
+    `Number(document.getElementById('pagination')?.dataset.total || '1')`,
   );
-  check(
-    `${label}: 下一页正确禁用`,
-    r.nextDisabled === 'true',
-    `disabled=${r.nextDisabled}`,
-  );
-}, '翻页边界-末页');
+  totalCdp.ws.close();
+  await fetch(`http://127.0.0.1:${PORT}/json/close/${totalTab.id}`);
+
+  if (totalPages >= 2) {
+    await runPage(`${BASE}/page/${totalPages}`, async (cdp, label) => {
+      const r = await evaluate(cdp, `(async () => {
+        const next = document.querySelector('[data-dir="next"]');
+        const pageRows = document.querySelectorAll('.post-row').length;
+        return {
+          pageRows,
+          total: Number(document.getElementById('pagination').dataset.total),
+          nextDisabled: next.getAttribute('aria-disabled'),
+          path: location.pathname,
+        };
+      })()`);
+      check(`${label}: 末页文章数 > 0`, r.pageRows > 0, `${r.pageRows} 篇`);
+      check(`${label}: 末页路径正确`, r.path === `/page/${r.total}/`, r.path);
+      check(`${label}: 下一页正确禁用`, r.nextDisabled === 'true', `disabled=${r.nextDisabled}`);
+    }, '翻页边界-末页');
+  } else {
+    check('翻页边界-末页: 仅一页，跳过', true);
+  }
+}
 
 // View Transitions：客户端切换页面
 await runPage(`${BASE}/`, async (cdp, label) => {
@@ -405,7 +413,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
         const visible = [...document.querySelectorAll('.post-row')].filter((el) => !el.hidden).length;
         return {
           visible,
-          page2Count: document.querySelectorAll('.post-row[data-page="2"]').length,
+          page2Count: document.querySelectorAll('.post-row').length,
         };
       })()`);
     } catch {}

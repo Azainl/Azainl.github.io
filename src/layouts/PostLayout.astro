@@ -6,20 +6,41 @@ import { SITE } from '../consts';
 import { formatDate } from '../utils/formatDate';
 import { readingTime } from '../utils/readingTime';
 import { vtName } from '../utils/vtName';
+import { tagSlug } from '../data/tags';
+import { url } from '../utils/url';
 
 interface Props {
   post: CollectionEntry<'posts'>;
-  prev?: CollectionEntry<'posts'> | null;
-  next?: CollectionEntry<'posts'> | null;
+  newer?: CollectionEntry<'posts'> | null;
+  older?: CollectionEntry<'posts'> | null;
 }
 
-const { post, prev, next } = Astro.props;
-const { Content } = await post.render();
+const { post, newer, older } = Astro.props;
+const { Content, headings } = await post.render();
 const minutes = readingTime(post.body);
 const pageTitle = `${post.data.title} · ${SITE.name}`;
+
+// 目录：只要二级和三级标题（Astro 已用 rehype-slug 生成好 id）
+const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+
+const canonical = new URL(url(`/posts/${post.slug}/`), Astro.site).href;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: post.data.title,
+  description: post.data.description,
+  datePublished: post.data.date.toISOString(),
+  dateModified: (post.data.updated ?? post.data.date).toISOString(),
+  inLanguage: 'zh-CN',
+  keywords: post.data.tags.join(', '),
+  author: { '@type': 'Person', name: SITE.author },
+  publisher: { '@type': 'Organization', name: SITE.name },
+  mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+};
 ---
 
 <BaseLayout title={pageTitle} description={post.data.description}>
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
   <article class="post">
     <header class="post-header reveal">
       <button
@@ -37,6 +58,19 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
         </time>
         <span class="dot" aria-hidden="true">·</span>
         <span>{minutes} 分钟阅读</span>
+        {
+          post.data.updated && (
+            <>
+              <span class="dot" aria-hidden="true">·</span>
+              <span>
+                更新于{' '}
+                <time datetime={post.data.updated.toISOString()}>
+                  {formatDate(post.data.updated)}
+                </time>
+              </span>
+            </>
+          )
+        }
       </p>
       <h1 class="post-title" transition:name={vtName(post.slug)}>
         {post.data.title}
@@ -47,7 +81,7 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
           <ul class="tag-list">
             {post.data.tags.map((tag) => (
               <li>
-                <a class="tag" href={`/tags/${tag}/`}>#{tag}</a>
+                <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>#{tag}</a>
               </li>
             ))}
           </ul>
@@ -55,28 +89,202 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
       }
     </header>
 
-    <div class="prose reveal" style="--reveal-delay: 80ms">
-      <Content />
-    </div>
+  {
+    toc.length > 1 && (
+      <aside class="toc-rail" aria-label="目录">
+        <nav class="toc">
+          <div class="toc-progress" aria-hidden="true">
+            <span class="toc-progress-bar"></span>
+          </div>
+          <p class="toc-title">目录</p>
+          <ol class="toc-list">
+            {toc.map((h) => (
+              <li class={`toc-depth-${h.depth}`}>
+                <a href={`#${h.slug}`} data-toc-link={h.slug}>{h.text}</a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </aside>
+    )
+  }
+
+  <div class="prose reveal" style="--reveal-delay: 80ms">
+    <Content />
+  </div>
 
     <footer class="post-footer reveal" style="--reveal-delay: 160ms">
       {
-        next && (
+        newer && (
           <p>
-            <span class="back">下一篇</span> ·{' '}
-            <a href={`/posts/${next.slug}/`}>{next.data.title}</a>
+            <span class="back">更新的一篇</span> ·{' '}
+            <a href={url(`/posts/${newer.slug}/`)}>{newer.data.title}</a>
           </p>
         )
       }
       {
-        prev && (
+        older && (
           <p>
-            <span class="back">上一篇</span> ·{' '}
-            <a href={`/posts/${prev.slug}/`}>{prev.data.title}</a>
+            <span class="back">更早的一篇</span> ·{' '}
+            <a href={url(`/posts/${older.slug}/`)}>{older.data.title}</a>
           </p>
         )
       }
-      <a class="back" href="/">← 返回首页</a>
+      <a class="back" href={url('/')}>← 返回首页</a>
     </footer>
   </article>
 </BaseLayout>
+
+<script>
+  import { onPageLoad } from '../scripts/lifecycle';
+
+  // 复制 / 已复制 用内联 SVG 图标，避免多余文字
+  const COPY_ICON =
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const CHECK_ICON =
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  /** 代码块：加语言标签 + 复制按钮（图标） */
+  function initCodeBlocks() {
+    const blocks = document.querySelectorAll('.prose pre.astro-code');
+    for (const pre of blocks) {
+      if (pre.parentElement?.classList.contains('code-wrap')) continue;
+
+      const lang = pre.getAttribute('data-language') || 'text';
+      const wrap = document.createElement('div');
+      wrap.className = 'code-wrap';
+      pre.parentElement?.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+
+      const label = document.createElement('span');
+      label.className = 'code-lang';
+      label.textContent = lang;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'code-copy';
+      btn.innerHTML = COPY_ICON;
+      btn.setAttribute('aria-label', `复制 ${lang} 代码`);
+      btn.addEventListener('click', async () => {
+        const code = pre.querySelector('code');
+        const text = (code?.textContent ?? pre.textContent ?? '').trimEnd();
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.innerHTML = CHECK_ICON;
+          btn.classList.add('copied');
+        } catch {
+          btn.classList.add('copy-failed');
+          window.setTimeout(() => btn.classList.remove('copy-failed'), 1600);
+          return;
+        }
+        window.setTimeout(() => {
+          btn.innerHTML = COPY_ICON;
+          btn.classList.remove('copied');
+        }, 1600);
+      });
+
+      wrap.append(label, btn);
+    }
+  }
+
+  /**
+   * 目录：滚动时高亮当前标题，并让当前项在目录栏内保持可见。
+   * 只滚动目录栏自身（不带动页面），体验更顺。
+   */
+  function initToc() {
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]')];
+    if (!links.length) return;
+    const map = new Map<string, HTMLAnchorElement>();
+    for (const a of links) {
+      const id = a.dataset.tocLink!;
+      map.set(id, a);
+    }
+    const targets = [...map.keys()]
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el);
+    if (!targets.length) return;
+
+    const rail = document.querySelector<HTMLElement>('.toc-rail');
+
+    const setActive = (id: string | null) => {
+      for (const [key, a] of map) {
+        const on = key === id;
+        a.classList.toggle('active', on);
+        if (on) a.setAttribute('aria-current', 'true');
+        else a.removeAttribute('aria-current');
+
+        // 让当前项在目录浮层内保持可见；浮层是 fixed 且自带滚动，
+        // 用 scrollIntoView 只滚动浮层本身，不改变页面滚动位置。
+        if (on && rail) {
+          const y = window.scrollY;
+          a.scrollIntoView({ block: 'nearest' });
+          if (window.scrollY !== y) window.scrollTo(0, y);
+        }
+      }
+    };
+
+    if ('IntersectionObserver' in window) {
+      const seen = new Set<string>();
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) seen.add(entry.target.id);
+            else seen.delete(entry.target.id);
+          }
+          // 取当前可见且在文档中最靠前的一个
+          const active = targets.find((t) => seen.has(t.id));
+          setActive(active ? active.id : null);
+        },
+        { rootMargin: '-15% 0px -70% 0px', threshold: 0 },
+      );
+      targets.forEach((t) => io.observe(t));
+    }
+  }
+
+  /** 阅读进度条：竖向，集成在目录左侧（替代原来的全局顶栏） */
+  let progressCleanup: (() => void) | undefined;
+  function initReadingProgress() {
+    const bar = document.querySelector<HTMLElement>('.toc-progress-bar');
+    if (!bar) return;
+    // 页面切换后旧监听要摘掉，避免叠加
+    if (progressCleanup) progressCleanup();
+
+    // 可滚动总高度缓存起来：滚动回调里读 scrollHeight 会强制同步布局导致抖动
+    let total = 0;
+    let raf = 0;
+    const measure = () => {
+      total = document.documentElement.scrollHeight - window.innerHeight;
+    };
+    const paint = () => {
+      raf = 0;
+      const ratio = total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 0;
+      bar.style.transform = `scaleY(${ratio})`;
+    };
+    // 滚动时只排一帧，每帧最多绘制一次
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+    const update = () => {
+      measure();
+      paint();
+    };
+
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', update);
+    // 图片等资源加载完会改变文档高度，补一次测量
+    window.addEventListener('load', update);
+    progressCleanup = () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('load', update);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }
+
+  onPageLoad(() => {
+    initCodeBlocks();
+    initToc();
+    initReadingProgress();
+  });
+</script>

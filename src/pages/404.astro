@@ -1,13 +1,14 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
+import { url } from '../utils/url';
 ---
 
-<BaseLayout title={`页面不存在 · ${SITE.name}`} description="你要找的页面不存在。">
+<BaseLayout title={`页面不存在 · ${SITE.name}`} description="你要找的页面不存在。" notFound>
   <div class="not-found reveal">
     <code>404 NOT_FOUND</code>
     <h1>页面走丢了</h1>
     <p>你访问的地址不存在，或者文章已经被移动了。</p>
-    <a href="/">回到首页</a>
+    <a href={url('/')}>回到首页</a>
   </div>
 </BaseLayout>

@@ -1,6 +1,7 @@
 ---
 import { SITE } from '../consts';
 import { Icon } from 'astro-icon/components';
+import { url } from '../utils/url';
 const year = new Date().getFullYear();
 ---
 
@@ -10,10 +11,10 @@ const year = new Date().getFullYear();
       © {year} {SITE.name} · 用 Astro 构建
     </p>
     <div class="footer-links">
-      <a href="/rss.xml">RSS 订阅</a>
+      <a class="footer-rss-text" href={url('/rss.xml')}>RSS 订阅</a>
       <a
-        class="icon-link"
-        href="/rss.xml"
+        class="icon-link footer-rss-icon"
+        href={url('/rss.xml')}
         aria-label="RSS 订阅"
         title="RSS 订阅"
       >

@@ -1,12 +1,17 @@
 // 临时验证脚本：用无头 Chrome + CDP 截取页面，支持浅色/深色与移动端视口。
+// 用法：先在另一个终端跑 `npm run dev`（或 `npm run preview`），再执行 `npm run screenshot`
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
+const ROOT = dirname(fileURLToPath(new URL('..', import.meta.url)));
+// 可用 CHROME_BIN 环境变量覆写 Chrome 路径，否则用默认安装位置
 const CHROME =
-  'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const BASE = 'http://localhost:4321';
+  process.env.CHROME_BIN || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const BASE = process.env.BASE_URL || 'http://localhost:4321';
 const PORT = 9222;
-const OUT = 'D:/Code/blog/.shots';
+const OUT = `${ROOT}/.shots`;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -16,7 +21,7 @@ const chrome = spawn(CHROME, [
   '--no-first-run',
   '--no-default-browser-check',
   `--remote-debugging-port=${PORT}`,
-  '--user-data-dir=D:/Code/blog/.chrome-tmp',
+  `--user-data-dir=${ROOT}/.chrome-tmp`,
   'about:blank',
 ]);
 

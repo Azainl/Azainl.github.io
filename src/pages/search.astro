@@ -30,11 +30,17 @@ import { Icon } from 'astro-icon/components';
     </div>
 
     <p id="search-meta" class="search-meta" hidden></p>
-    <div id="search-empty" class="search-empty" hidden>
+    <div id="search-loading" class="search-status">
+      <p>正在载入文章索引……</p>
+    </div>
+    <div id="search-empty" class="search-status" hidden>
       <p>输入关键词开始搜索，例如「PowerShell」「Astro」「阅读」。</p>
     </div>
-    <div id="search-none" class="search-none" hidden>
+    <div id="search-none" class="search-status" hidden>
       <p>没有找到相关文章，换个关键词试试？</p>
+    </div>
+    <div id="search-error" class="search-status" hidden>
+      <p>文章索引载入失败，请刷新页面重试。</p>
     </div>
     <ol id="search-results" class="post-list" hidden></ol>
   </div>
@@ -50,6 +56,9 @@ import { Icon } from 'astro-icon/components';
     type PostIndex,
   } from '../scripts/search';
   import { vtName } from '../utils/vtName';
+  import { onPageLoad } from '../scripts/lifecycle';
+  import { tagSlug } from '../data/tags';
+  import { url } from '../utils/url';
 
   let index: PostIndex[] = [];
   let timer: number | undefined;
@@ -63,6 +72,8 @@ import { Icon } from 'astro-icon/components';
     const meta = document.getElementById('search-meta') as HTMLElement;
     const empty = document.getElementById('search-empty') as HTMLElement;
     const none = document.getElementById('search-none') as HTMLElement;
+    const loading = document.getElementById('search-loading') as HTMLElement;
+    const errorBox = document.getElementById('search-error') as HTMLElement;
     const results = document.getElementById('search-results') as HTMLOListElement;
 
     function render(items: ReturnType<typeof searchIndex>, query: string) {
@@ -72,7 +83,7 @@ import { Icon } from 'astro-icon/components';
         li.className = 'post-row search-result-row';
 
         const link = document.createElement('a');
-        link.href = `/posts/${post.slug}/`;
+        link.href = url(`/posts/${post.slug}/`);
 
         const time = document.createElement('time');
         time.dateTime = post.date;
@@ -101,7 +112,7 @@ import { Icon } from 'astro-icon/components';
           const item = document.createElement('li');
           const tagLink = document.createElement('a');
           tagLink.className = 'tag';
-          tagLink.href = `/tags/${tag}/`;
+          tagLink.href = url(`/tags/${tagSlug(tag)}/`);
           tagLink.textContent = `#${tag}`;
           item.appendChild(tagLink);
           tags.appendChild(item);
@@ -113,17 +124,21 @@ import { Icon } from 'astro-icon/components';
       }
     }
 
-    function updateUrl(query: string) {
-      const url = new URL(window.location.href);
-      if (query) url.searchParams.set('q', query);
-      else url.searchParams.delete('q');
-      window.history.replaceState(null, '', url);
+    function updateUrl(q: string) {
+      const next = new URL(window.location.href);
+      if (q) next.searchParams.set('q', q);
+      else next.searchParams.delete('q');
+      // 保留 Astro View Transitions 写入 history.state 的状态，
+      // 传 null 会清空它，导致站内返回 / 滚动恢复失效
+      window.history.replaceState(history.state, '', next);
     }
 
     function run() {
       const q = input.value.trim();
       updateUrl(q);
       clearBtn.classList.toggle('visible', q.length > 0);
+      loading.hidden = true;
+      errorBox.hidden = true;
       if (!q) {
         meta.hidden = true;
         results.hidden = true;
@@ -163,17 +178,24 @@ import { Icon } from 'astro-icon/components';
       input.focus();
     });
 
-    buildIndex().then((data) => {
-      index = data;
-      const initial = new URLSearchParams(window.location.search).get('q') ?? '';
-      if (initial) {
-        input.value = initial;
-        run();
-      } else {
-        empty.hidden = false;
-      }
-    });
+    buildIndex()
+      .then((data) => {
+        index = data;
+        const initial = new URLSearchParams(window.location.search).get('q') ?? '';
+        if (initial) {
+          input.value = initial;
+          run();
+        } else {
+          loading.hidden = true;
+          empty.hidden = false;
+        }
+      })
+      .catch(() => {
+        // 索引拉取失败（离线 / 网络问题）时给出明确反馈，而不是一直卡在「正在载入」
+        loading.hidden = true;
+        errorBox.hidden = false;
+      });
   }
 
-  document.addEventListener('astro:page-load', initSearch);
+  onPageLoad(initSearch);
 </script>

@@ -1,21 +1,23 @@
 ---
 import { SITE } from '../consts';
 import { Icon } from 'astro-icon/components';
+import { url } from '../utils/url';
 
 const path = Astro.url.pathname;
+const home = url('/');
 const isActive = (href: string) =>
-  href === '/' ? path === '/' : path.startsWith(href);
+  href === home ? path === home : path.startsWith(href);
 
 const links = [
-  { href: '/', label: '首页' },
-  { href: '/tags/', label: '标签' },
-  { href: '/about/', label: '关于' },
+  { href: url('/'), label: '首页' },
+  { href: url('/tags/'), label: '标签' },
+  { href: url('/about/'), label: '关于' },
 ];
 ---
 
 <header class="site-header">
   <div class="header-inner">
-    <a class="wordmark" href="/" aria-label="{SITE.name} 首页">
+    <a class="wordmark" href={url('/')} aria-label={`${SITE.name} 首页`}>
       Az<span>ain</span>
     </a>
     <nav class="site-nav" aria-label="主导航">
@@ -37,22 +39,27 @@ const links = [
           placeholder="搜索文章…"
           autocomplete="off"
           aria-label="站内搜索"
-          aria-controls="search-popover"
+          role="combobox"
+          aria-expanded="false"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-controls="search-popover-list"
         />
-        <div
-          class="search-popover"
-          id="search-popover"
-          role="listbox"
-          aria-label="搜索结果"
-        >
+        <div class="search-popover" id="search-popover">
           <p class="search-popover-empty" hidden>没有找到相关文章</p>
-          <ul class="search-popover-list" hidden></ul>
-          <a class="search-popover-more" href="/search/" hidden></a>
+          <ul
+            class="search-popover-list"
+            id="search-popover-list"
+            role="listbox"
+            aria-label="搜索结果"
+            hidden
+          ></ul>
+          <a class="search-popover-more" href={url('/search/')} hidden></a>
         </div>
       </div>
       <a
         class="header-search-link"
-        href="/search/"
+        href={url('/search/')}
         aria-label="搜索"
         title="搜索"
       >
@@ -79,6 +86,8 @@ const links = [
     formatDateCn,
     type PostIndex,
   } from '../scripts/search';
+  import { onPageLoad } from '../scripts/lifecycle';
+  import { url } from '../utils/url';
   import { vtName } from '../utils/vtName';
 
   let index: PostIndex[] = [];
@@ -86,6 +95,17 @@ const links = [
   buildIndex().then((data) => {
     index = data;
   });
+
+  /** 主题切换：独立于搜索框，不再挂在 #header-search 的初始化守卫里 */
+  function initTheme() {
+    const toggle = document.getElementById('theme-toggle');
+    if (!toggle || toggle.dataset.inited) return;
+    toggle.dataset.inited = 'true';
+    toggle.addEventListener('click', () => {
+      const dark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+    });
+  }
 
   /** 每次页面加载/切换后重新绑定页头交互（页头节点会被重建） */
   function initHeader() {
@@ -104,9 +124,22 @@ const links = [
     ) as HTMLAnchorElement;
     let activeIndex = -1;
 
+    function syncActiveDescendant() {
+      const items = listEl.querySelectorAll('.search-popover-item');
+      const id = activeIndex >= 0 ? items[activeIndex]?.id : undefined;
+      if (id) input.setAttribute('aria-activedescendant', id);
+      else input.removeAttribute('aria-activedescendant');
+      items.forEach((el, i) => {
+        const selected = i === activeIndex ? 'true' : 'false';
+        el.setAttribute('aria-selected', selected);
+      });
+    }
+
     function closePopover() {
       popover.classList.remove('open');
+      input.setAttribute('aria-expanded', 'false');
       activeIndex = -1;
+      syncActiveDescendant();
     }
 
     function render(query: string) {
@@ -121,11 +154,15 @@ const links = [
       } else {
         emptyEl.hidden = true;
         listEl.hidden = false;
-        for (const { post } of items.slice(0, 6)) {
+        for (const [i, { post }] of items.slice(0, 6).entries()) {
           const li = document.createElement('li');
+          li.setAttribute('role', 'presentation');
           const link = document.createElement('a');
           link.className = 'search-popover-item';
-          link.href = `/posts/${post.slug}/`;
+          link.id = `search-opt-${i}`;
+          link.setAttribute('role', 'option');
+          link.setAttribute('aria-selected', 'false');
+          link.href = url(`/posts/${post.slug}/`);
 
           const title = document.createElement('span');
           title.className = 'search-popover-title';
@@ -142,13 +179,15 @@ const links = [
           li.appendChild(link);
           listEl.appendChild(li);
         }
-        const url = new URL('/search/', window.location.origin);
-        url.searchParams.set('q', query);
-        moreEl.href = url.toString();
+        const searchUrl = new URL(url('/search/'), window.location.origin);
+        searchUrl.searchParams.set('q', query);
+        moreEl.href = searchUrl.toString();
         moreEl.textContent = `查看全部 ${items.length} 条结果`;
         moreEl.hidden = false;
       }
       popover.classList.add('open');
+      input.setAttribute('aria-expanded', 'true');
+      syncActiveDescendant();
     }
 
     let timer: number | undefined;
@@ -180,11 +219,11 @@ const links = [
         }
         const hits = searchIndex(index, input.value.trim());
         if (hits.length) {
-          window.location.href = `/posts/${hits[0].post.slug}/`;
+          window.location.href = url(`/posts/${hits[0].post.slug}/`);
         } else {
-          const url = new URL('/search/', window.location.origin);
-          url.searchParams.set('q', input.value.trim());
-          window.location.href = url.toString();
+          const searchUrl = new URL(url('/search/'), window.location.origin);
+          searchUrl.searchParams.set('q', input.value.trim());
+          window.location.href = searchUrl.toString();
         }
         return;
       }
@@ -199,36 +238,39 @@ const links = [
         }
         items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
         (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+        syncActiveDescendant();
       }
-    });
-
-    const toggle = document.getElementById('theme-toggle');
-    toggle?.addEventListener('click', () => {
-      const dark = document.documentElement.classList.toggle('dark');
-      localStorage.setItem('theme', dark ? 'dark' : 'light');
     });
   }
 
   // 客户端切换页面后，保持导航高亮与当前页一致
   function updateNav() {
     const path = window.location.pathname;
+    const home = url('/');
     document.querySelectorAll('.site-nav a').forEach((a) => {
-      const href = a.getAttribute('href') || '/';
-      const active = href === '/' ? path === '/' : path.startsWith(href);
+      const href = a.getAttribute('href') || home;
+      const active = href === home ? path === home : path.startsWith(href);
       if (active) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     });
   }
 
-  document.addEventListener('pointerdown', (event) => {
-    const container = document.getElementById('header-search');
-    if (container && !container.contains(event.target as Node)) {
-      document.getElementById('search-popover')?.classList.remove('open');
-    }
-  });
+  let outsideBound = false;
+  function bindOutsideClick() {
+    if (outsideBound) return;
+    outsideBound = true;
+    document.addEventListener('pointerdown', (event) => {
+      const container = document.getElementById('header-search');
+      if (container && !container.contains(event.target as Node)) {
+        document.getElementById('search-popover')?.classList.remove('open');
+      }
+    });
+  }
 
-  document.addEventListener('astro:page-load', () => {
+  onPageLoad(() => {
     initHeader();
+    initTheme();
     updateNav();
+    bindOutsideClick();
   });
 </script>

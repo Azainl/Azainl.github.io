@@ -1,9 +1,11 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getCollection } from 'astro:content';
 import { SITE } from '../../consts';
+import { getPublishedPosts } from '../../utils/posts';
+import { tagSlug } from '../../data/tags';
+import { url } from '../../utils/url';
 
-const posts = await getCollection('posts', ({ data }) => !data.draft);
+const posts = await getPublishedPosts();
 const counts = new Map<string, number>();
 for (const post of posts) {
   for (const tag of post.data.tags) {
@@ -29,7 +31,7 @@ const tags = [...counts.entries()].sort(
       {
         tags.map(([tag, count]) => (
           <li>
-            <a class="tag" href={`/tags/${tag}/`}>
+            <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>
               #{tag}<span class="count">{count}</span>
             </a>
           </li>

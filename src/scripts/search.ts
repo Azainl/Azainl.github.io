@@ -34,9 +34,14 @@ export function highlight(node: HTMLElement, text: string, query: string): void 
   node.replaceChildren(frag);
 }
 
+// 与服务端渲染保持同一时区，避免搜索结果里的日期和文章页差一天
 export function formatDateCn(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Asia/Shanghai',
+  }).format(new Date(iso));
 }
 
 export function snippet(content: string, query: string): string {
@@ -81,7 +86,8 @@ let cached: Promise<PostIndex[]> | null = null;
 /** 拉取搜索索引（带缓存） */
 export function buildIndex(): Promise<PostIndex[]> {
   if (!cached) {
-    cached = fetch('/search.json')
+    const base = import.meta.env.BASE_URL || '/';
+    cached = fetch(base + 'search.json')
       .then((res) => (res.ok ? res.json() : []))
       .catch(() => []);
   }
