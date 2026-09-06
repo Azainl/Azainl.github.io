@@ -508,6 +508,127 @@ a {
   text-wrap: pretty;
 }
 
+/* Hero 副标题：一行等宽小字，压住节奏但不抢主标题 */
+.home-hero .hero-kicker {
+  margin-top: 1.1rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ============================================================
+   首页区块：精选 / 最近 / 内容领域 / 关于
+   与 .archive 共用同一容器宽度，保证左边缘对齐
+   ============================================================ */
+.home-section,
+.home-section-head {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.home-section {
+  padding-bottom: 3.25rem;
+}
+
+.home-section-title {
+  margin: 0 0 1rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* 精选文章：与文章列表同一套分隔线语言，只用 hover 底色做反馈 */
+.featured-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+.featured-item {
+  border-bottom: 1px solid var(--line);
+}
+.featured-item > a {
+  display: block;
+  padding: 1.15rem 0.5rem;
+  margin: 0 -0.5rem;
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease;
+}
+.featured-item > a:hover {
+  background: var(--bg-soft);
+}
+.featured-item time {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.featured-item h3 {
+  margin: 0.35rem 0 0;
+  font-size: var(--text-h3);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  text-wrap: pretty;
+  transition: color 0.15s ease;
+}
+.featured-item p {
+  margin: 0.35rem 0 0;
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1.75;
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+.featured-item > a:hover h3 {
+  color: var(--accent);
+}
+
+/* 内容领域：不用卡片堆砌，只用一条上边线做分组 */
+.area-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1.5rem 2rem;
+}
+.area-card {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 0.85rem;
+}
+.area-card h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.area-card p {
+  margin: 0.3rem 0 0.75rem;
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.area-card .tag-list {
+  margin: 0;
+}
+
+.home-about p {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+.home-about-link {
+  display: inline-block;
+  margin-top: 0.85rem;
+  font-size: var(--text-sm);
+  color: var(--accent);
+}
+
 .archive {
   max-width: var(--container-wide);
   margin: 0 auto;
