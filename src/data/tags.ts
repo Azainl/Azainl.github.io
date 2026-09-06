@@ -55,3 +55,36 @@ export function tagDescription(tag: string): string {
 export function tagDescriptionBySlug(slug: string): string {
   return bySlug.get(slug)?.description ?? '关于该主题的文章';
 }
+
+/**
+ * 「内容领域」：把现有标签在展示层面归成几大类（首页用）。
+ * 只影响首页的归类展示——不新增、不删除、不改名任何现有标签，
+ * /tags/<slug>/ 路由与既有 URL 一律保持原样。
+ */
+export interface TagGroup {
+  name: string;
+  description: string;
+  tags: string[];
+}
+
+export const TAG_GROUPS: TagGroup[] = [
+  {
+    name: '技术',
+    description: '前端、框架、性能与命令行实践',
+    tags: ['前端', 'Astro', '性能优化', '工具', '终端', 'SEO'],
+  },
+  { name: '思考', description: '关于效率与生活的零散想法', tags: ['思考', '随笔', '效率'] },
+  { name: '输入', description: '读书笔记与阅读记录', tags: ['阅读'] },
+  { name: '创作', description: '写作方法与长期练习', tags: ['写作'] },
+];
+
+/**
+ * 按站点上真实出现过的标签过滤分组：
+ * 避免首页出现空分类，也避免给出点进去没有内容的死链。
+ */
+export function usedTagGroups(usedTags: Set<string>): TagGroup[] {
+  return TAG_GROUPS.map((group) => ({
+    ...group,
+    tags: group.tags.filter((tag) => usedTags.has(tag)),
+  })).filter((group) => group.tags.length > 0);
+}

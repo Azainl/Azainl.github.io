@@ -28,6 +28,41 @@ export async function getPublishedPosts(): Promise<Post[]> {
   );
 }
 
+/** 首页「精选文章」：frontmatter 里 featured: true 的文章，按日期倒序 */
+export function getFeaturedPosts(posts: Post[], limit = 3): Post[] {
+  return posts.filter((post) => post.data.featured).slice(0, limit);
+}
+
+/**
+ * 相关文章：按「共同标签数」打分，同分用日期倒序，featured 给一点额外权重。
+ * 只是简单加权，不引入任何推荐系统或 AI 依赖。
+ */
+export function getRelatedPosts(
+  posts: Post[],
+  current: Post,
+  limit = 3,
+): Post[] {
+  const tags = new Set(current.data.tags);
+  // 没有标签就无从计算相关性，直接返回空（页面会整块隐藏，不留空标题）
+  if (tags.size === 0) return [];
+
+  return posts
+    .filter((post) => post.slug !== current.slug)
+    .map((post) => {
+      const shared = post.data.tags.filter((tag) => tags.has(tag)).length;
+      return { post, score: shared + (post.data.featured ? 0.5 : 0) };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.post.data.date.valueOf() - a.post.data.date.valueOf() ||
+        a.post.slug.localeCompare(b.post.slug),
+    )
+    .slice(0, limit)
+    .map((entry) => entry.post);
+}
+
 /** 取某篇文章在列表里的前后邻居（列表是倒序的，所以 newer 在 older 前面） */
 export function getNeighbors(
   posts: Post[],

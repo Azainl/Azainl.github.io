@@ -9,6 +9,8 @@ const posts = defineCollection({
     updated: z.coerce.date().optional(),
     tags: z.array(z.string()).default([]),
     draft: z.boolean().default(false),
+    /** 精选：首页「精选文章」区块展示用，最多 2～3 篇 */
+    featured: z.boolean().default(false),
   }),
 });
 

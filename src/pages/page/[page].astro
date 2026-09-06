@@ -1,14 +1,11 @@
 ---
 import type { GetStaticPaths } from 'astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { SITE } from '../../consts';
+import { SITE, PER_PAGE } from '../../consts';
 import { getPublishedPosts } from '../../utils/posts';
 import Archive from '../../components/Archive.astro';
 
-const PER_PAGE = 4;
-
 export const getStaticPaths = (async () => {
-  const PER_PAGE = 4; // getStaticPaths 在独立作用域，需本地定义
   const posts = await getPublishedPosts();
   const totalPages = Math.max(1, Math.ceil(posts.length / PER_PAGE));
   // 第 1 页是首页 /，这里只生成第 2 页及以后
