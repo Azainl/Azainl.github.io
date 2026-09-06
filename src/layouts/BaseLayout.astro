@@ -64,8 +64,13 @@ const ogImage = new URL(url('/og.svg'), Astro.site).href;
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
     <ClientRouter />
