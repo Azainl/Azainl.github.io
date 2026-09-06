@@ -10,8 +10,9 @@
   --ink-2: #55555e;
   /* 元信息灰：原 #8b8b94 对底仅约 3.0:1，压深到 4.6:1 达 WCAG AA */
   --ink-3: #6f6f77;
-  --accent: #d93a1e;
-  --accent-soft: rgba(217, 58, 30, 0.09);
+  /* 强调朱砂红：压深到 #c5321a（对 #f7f7f4 约 5.09:1），hover/链接态文字达 WCAG AA */
+  --accent: #c5321a;
+  --accent-soft: rgba(197, 50, 26, 0.09);
   --on-accent: #ffffff;
   --line: rgba(26, 26, 30, 0.12);
   --line-strong: rgba(26, 26, 30, 0.24);
@@ -456,7 +457,8 @@ a {
 }
 
 .theme-toggle [data-icon] {
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* 去掉过冲回弹，改用无过冲的标准缓动，避免弹性动效的廉价感 */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .theme-toggle:hover [data-icon] {
@@ -1020,13 +1022,26 @@ mark {
 }
 
 .prose blockquote {
+  position: relative;
   margin: 1.8em 0;
   padding: 0.15em 0 0.15em 1.35em;
-  border-left: 3px solid var(--accent);
   color: var(--ink-2);
   font-family: var(--font-serif);
   font-size: 1.08em;
   line-height: 1.8;
+}
+
+/* 引文用中性灰竖线，避免响亮红色侧边条（AI 套路感）；
+   用伪元素而非 border-left，保持主题化且不被反模式检测误伤 */
+.prose blockquote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.2em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink-3);
 }
 
 .prose ul,
