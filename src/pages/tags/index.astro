@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { SITE } from '../../consts';
+import { Icon } from 'astro-icon/components';
 import { getPublishedPosts } from '../../utils/posts';
 import { tagSlug } from '../../data/tags';
 import { url } from '../../utils/url';
@@ -22,6 +23,15 @@ const tags = [...counts.entries()].sort(
   description="按标签浏览全部文章。"
 >
   <div class="page-head reveal">
+    <button
+      class="post-back"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+    >
+      <Icon name="arrow-left" size={15} />
+      <span>返回</span>
+    </button>
     <h1>标签</h1>
     <p>共 {posts.length} 篇文章，分布在 {tags.length} 个标签下。</p>
   </div>
