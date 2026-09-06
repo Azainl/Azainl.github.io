@@ -13,9 +13,10 @@ interface Props {
   post: CollectionEntry<'posts'>;
   newer?: CollectionEntry<'posts'> | null;
   older?: CollectionEntry<'posts'> | null;
+  related?: CollectionEntry<'posts'>[];
 }
 
-const { post, newer, older } = Astro.props;
+const { post, newer, older, related = [] } = Astro.props;
 const { Content, headings } = await post.render();
 const minutes = readingTime(post.body);
 const pageTitle = `${post.data.title} · ${SITE.name}`;
@@ -87,11 +88,25 @@ const jsonLd = {
           </ul>
         )
       }
+      {
+        toc.length > 1 && (
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="toc-panel"
+          >
+            <Icon name="list" size={16} />
+            <span>目录</span>
+          </button>
+        )
+      }
     </header>
 
   {
     toc.length > 1 && (
-      <aside class="toc-rail" aria-label="目录">
+      <aside class="toc-rail" id="toc-panel" aria-label="目录">
         <nav class="toc">
           <div class="toc-progress" aria-hidden="true">
             <span class="toc-progress-bar"></span>
@@ -113,26 +128,50 @@ const jsonLd = {
     <Content />
   </div>
 
+    {
+      related.length > 0 && (
+        <section class="related reveal" aria-label="相关文章" style="--reveal-delay: 140ms">
+          <h2 class="related-title">相关文章</h2>
+          <ul class="related-list">
+            {related.map((r) => (
+              <li>
+                <a href={url(`/posts/${r.slug}/`)}>
+                  <span class="related-name">{r.data.title}</span>
+                  <time class="related-meta" datetime={r.data.date.toISOString()}>
+                    {formatDate(r.data.date)}
+                  </time>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
     <footer class="post-footer reveal" style="--reveal-delay: 160ms">
-      {
-        newer && (
-          <p>
-            <span class="back">更新的一篇</span> ·{' '}
-            <a href={url(`/posts/${newer.slug}/`)}>{newer.data.title}</a>
-          </p>
-        )
-      }
-      {
-        older && (
-          <p>
-            <span class="back">更早的一篇</span> ·{' '}
-            <a href={url(`/posts/${older.slug}/`)}>{older.data.title}</a>
-          </p>
-        )
-      }
+      <nav class="post-nav" aria-label="上一篇和下一篇">
+        {
+          newer && (
+            <a class="post-nav-link newer" href={url(`/posts/${newer.slug}/`)}>
+              <span class="post-nav-dir">更新的文章</span>
+              <span class="post-nav-title">{newer.data.title}</span>
+            </a>
+          )
+        }
+        {
+          older && (
+            <a class="post-nav-link older" href={url(`/posts/${older.slug}/`)}>
+              <span class="post-nav-dir">更早的文章</span>
+              <span class="post-nav-title">{older.data.title}</span>
+            </a>
+          )
+        }
+      </nav>
       <a class="back" href={url('/')}>← 返回首页</a>
     </footer>
   </article>
+
+  <div class="toc-backdrop" id="toc-backdrop" hidden></div>
 </BaseLayout>
 
 <script>
@@ -282,9 +321,48 @@ const jsonLd = {
     };
   }
 
+  /**
+   * 移动端目录：点「目录」按钮滑出抽屉，再点收起；点遮罩或某条目也收起。
+   * 桌面端（≥1080px）TOC 是固定的右栏，这个逻辑不生效（按钮隐藏）。
+   */
+  function initMobileToc() {
+    const toggle = document.getElementById('toc-toggle');
+    const panel = document.getElementById('toc-panel');
+    const backdrop = document.getElementById('toc-backdrop');
+    if (!toggle || !panel || !backdrop) return;
+
+    const open = () => {
+      panel.classList.add('open');
+      backdrop.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      document.body.classList.add('toc-open');
+    };
+    const close = () => {
+      panel.classList.remove('open');
+      backdrop.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('toc-open');
+    };
+
+    toggle.addEventListener('click', () => {
+      if (panel.classList.contains('open')) close();
+      else open();
+    });
+    backdrop.addEventListener('click', close);
+    // 选了某条目录就收起，移动端避免停在抽屉里
+    panel
+      .querySelectorAll<HTMLAnchorElement>('[data-toc-link]')
+      .forEach((a) => a.addEventListener('click', close));
+    // ESC 关闭
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && panel.classList.contains('open')) close();
+    });
+  }
+
   onPageLoad(() => {
     initCodeBlocks();
     initToc();
     initReadingProgress();
+    initMobileToc();
   });
 </script>

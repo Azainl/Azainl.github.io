@@ -89,6 +89,7 @@ const ogImage = new URL(url('/og.svg'), Astro.site).href;
     <slot name="ld" />
   </head>
   <body data-path={Astro.url.pathname} data-notfound={notFound ? '' : undefined}>
+    <a class="skip-link" href="#main">跳到主要内容</a>
     <Header />
     <main id="main">
       <slot />

@@ -148,6 +148,28 @@ a {
   border-radius: 3px;
 }
 
+/* 跳转链接：键盘聚焦前藏在视口外，聚焦后滑入，方便无障碍用户直达正文 */
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  transform: translateY(-150%);
+  z-index: 100;
+  padding: 0.55rem 0.95rem;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 [hidden] {
   display: none !important;
 }
@@ -1055,6 +1077,8 @@ mark {
   line-height: 1.28;
   letter-spacing: 0.01em;
   text-wrap: balance;
+  /* 极长的英文单词 / URL 也能断行，避免窄屏横向溢出 */
+  overflow-wrap: break-word;
 }
 
 /* 导语：与正文拉开可见层级，但仍在正文色系内，不抢标题 */
@@ -1094,6 +1118,85 @@ mark {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--ink-3);
+}
+
+/* 上一篇 / 下一篇：两个明确分区，桌面左右排，窄屏纵向堆叠 */
+.post-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.post-nav-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.post-nav-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.post-nav-link.older {
+  text-align: right;
+}
+.post-nav-dir {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.post-nav-title {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 相关文章：按共同标签计算，整块在「无结果」时由页面隐藏 */
+.related {
+  margin-top: 3rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line);
+}
+.related-title {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+}
+.related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.related-list a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.related-list a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.related-name {
+  font-weight: 500;
+}
+.related-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -1229,6 +1332,15 @@ mark {
   border-collapse: collapse;
   margin: 1.5em 0;
   font-size: 0.9375rem;
+}
+
+/* 窄屏下表格可能比视口宽：改成可横向滚动，避免整页横向溢出 */
+@media (max-width: 640px) {
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 .prose th,
@@ -1491,6 +1603,84 @@ html[data-astro-transition] .reveal:not(.is-visible) {
      空白在文章「旁边」，不在「前面」。 */
   .post {
     padding-right: 15rem;
+  }
+}
+
+/* 移动端目录开关按钮：桌面隐藏，≤1079px 才出现 */
+.toc-toggle {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1.1rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.toc-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 移动端遮罩：点它收起抽屉，桌面端不渲染 */
+.toc-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+
+@media (max-width: 1079px) {
+  .toc-toggle {
+    display: inline-flex;
+  }
+  /* 移动端把目录变成从右侧滑入的抽屉 */
+  .toc-rail {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(20rem, 86vw);
+    max-height: none;
+    padding: 1.25rem 1.1rem;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.12);
+    overflow-y: auto;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.24s ease, visibility 0.24s ease;
+    z-index: 31;
+  }
+  .toc-rail.open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  /* 抽屉里标题上方留点空间，避免贴顶 */
+  .toc-rail .toc {
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+  /* 窄屏下上一篇/下一篇纵向堆叠、方向统一 */
+  .post-nav {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .post-nav-link.older {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .related-list a {
+    flex-direction: column;
+    gap: 0.2rem;
   }
 }
 

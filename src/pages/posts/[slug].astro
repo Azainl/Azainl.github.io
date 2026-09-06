@@ -1,21 +1,22 @@
 ---
 import PostLayout from '../../layouts/PostLayout.astro';
-import { getPublishedPosts } from '../../utils/posts';
+import { getPublishedPosts, getRelatedPosts } from '../../utils/posts';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
-  // 邻接关系在这里一次算好，避免每篇文章各自全量排序 + 查找
+  // 邻接关系 + 相关文章都在这里一次算好，避免每篇文章各自全量排序 + 查找
   return posts.map((post, i) => ({
     params: { slug: post.slug },
     props: {
       post,
       newer: i > 0 ? posts[i - 1] : null,
       older: i < posts.length - 1 ? posts[i + 1] : null,
+      related: getRelatedPosts(posts, post),
     },
   }));
 }
 
-const { post, newer, older } = Astro.props;
+const { post, newer, older, related } = Astro.props;
 ---
 
-<PostLayout post={post} newer={newer} older={older} />
+<PostLayout post={post} newer={newer} older={older} related={related} />
