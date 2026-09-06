@@ -327,10 +327,40 @@ const links = [
     });
   }
 
+  /**
+   * Ctrl/Cmd + K 打开搜索。
+   * 绑定在 document 上（客户端路由切换后 document 对象保留，只需绑一次），
+   * 但每次触发都重新查询当前页头的输入框——页头节点每页都会重建。
+   */
+  let shortcutBound = false;
+  function bindSearchShortcut() {
+    if (shortcutBound) return;
+    shortcutBound = true;
+    document.addEventListener('keydown', (event) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key.toLowerCase() !== 'k') return;
+      // 浏览器默认会把 Ctrl/Cmd + K 送给地址栏，必须拦下来
+      event.preventDefault();
+
+      const input =
+        document.querySelector<HTMLInputElement>('.header-search-input');
+      // 窄屏下页头搜索框被隐藏（getClientRects 为空），此时改跳搜索页
+      if (input && input.getClientRects().length > 0) {
+        input.focus();
+        input.select();
+        // 已有关键词时顺带把结果面板带出来
+        if (input.value.trim()) input.dispatchEvent(new Event('input'));
+      } else {
+        window.location.href = url('/search/');
+      }
+    });
+  }
+
   onPageLoad(() => {
     initHeader();
     initTheme();
     updateNav();
     bindOutsideClick();
+    bindSearchShortcut();
   });
 </script>
