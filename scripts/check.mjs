@@ -221,7 +221,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 翻页控件显示`, r.navVisible);
 }, '首页标签与翻页');
 
-await runPage(`${BASE}/page/2`, async (cdp, label) => {
+await runPage(`${BASE}/page/2/`, async (cdp, label) => {
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
   const r = await evaluate(cdp, `(() => {
     const total = Number(document.getElementById('pagination').dataset.total);
@@ -323,7 +323,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   await fetch(`http://127.0.0.1:${PORT}/json/close/${totalTab.id}`);
 
   if (totalPages >= 2) {
-    await runPage(`${BASE}/page/${totalPages}`, async (cdp, label) => {
+    await runPage(`${BASE}/page/${totalPages}/`, async (cdp, label) => {
       const r = await evaluate(cdp, `(async () => {
         const next = document.querySelector('[data-dir="next"]');
         const pageRows = document.querySelectorAll('.post-row').length;
@@ -360,8 +360,16 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     const backBtn = document.getElementById('back-button');
     const backVisible = !backBtn.hidden;
     const before = document.documentElement.classList.contains('dark');
-    document.getElementById('theme-toggle')?.click(); // 切到深色
-    await new Promise((r) => setTimeout(r, 100));
+    // 主题是三态循环 light → dark → system：最多点 3 次直到进入深色
+    let toggled = false;
+    for (let i = 0; i < 3; i++) {
+      document.getElementById('theme-toggle')?.click();
+      await new Promise((r) => setTimeout(r, 120));
+      if (document.documentElement.classList.contains('dark') !== before) {
+        toggled = true;
+      }
+      if (document.documentElement.classList.contains('dark')) break;
+    }
     const after = document.documentElement.classList.contains('dark');
     return {
       path: decodeURIComponent(location.pathname),
@@ -370,7 +378,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       h1,
       navOnPost,
       backVisible,
-      toggleWorks: before !== after,
+      toggleWorks: toggled && after === true,
       darkOnPost: document.documentElement.classList.contains('dark'),
     };
   })()`);
@@ -457,10 +465,15 @@ await runPage(`${BASE}/tags/`, async (cdp, label) => {
     sizes: [...new Set([...document.querySelectorAll('.tag-cloud .tag')].map(
       (a) => getComputedStyle(a).fontSize,
     ))],
+    backVisible: (() => {
+      const b = document.getElementById('back-button');
+      return !!b && !b.hidden;
+    })(),
   }))()`);
   check(`${label}: 标签云渲染`, r.tags >= 8, `${r.tags} 个标签`);
   check(`${label}: 标签带数量`, r.counts.every((c) => /^\d+$/.test(c)), r.counts.join(','));
   check(`${label}: 标签字号统一`, r.sizes.length === 1, r.sizes.join(','));
+  check(`${label}: 显示返回按钮`, r.backVisible === true);
 }, '标签总览');
 
 await runPage(`${BASE}/`, async (cdp, label) => {
@@ -521,6 +534,24 @@ await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
   check(`${label}: 返回链接`, r.back);
   check(`${label}: 当前标签高亮`, r.current >= 1, `${r.current} 个`);
 }, '标签详情');
+
+await runPage(`${BASE}/tags/essays/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    const btn = document.getElementById('back-button');
+    const visible = !!btn && !btn.hidden;
+    if (btn) {
+      btn.click();
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (location.pathname === '/') break;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    return { visible, path: location.pathname };
+  })()`);
+  check(`${label}: 显示返回按钮`, r.visible === true);
+  check(`${label}: 直进点击回首页`, r.path === '/', r.path);
+}, '返回按钮-标签详情直进');
 
 await runPage(`${BASE}/no-such-page/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
