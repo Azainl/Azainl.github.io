@@ -1,12 +1,20 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE } from '../consts';
-import { getPublishedPosts } from '../utils/posts';
+import { SITE, PER_PAGE } from '../consts';
+import { getPublishedPosts, getFeaturedPosts } from '../utils/posts';
 import Archive from '../components/Archive.astro';
 import { url } from '../utils/url';
+import { tagSlug, usedTagGroups } from '../data/tags';
+import { formatDateShort } from '../utils/formatDate';
 
 const posts = await getPublishedPosts();
-const POSTS_PER_PAGE = 4;
+// 首页「最近文章」展示 6 篇（规格书要求 5～8 篇），翻页行为与 URL 不变
+const featured = getFeaturedPosts(posts, 3);
+
+// 内容领域：只归类站点上真实出现过的标签，避免出现空分类或死链
+const usedTags = new Set(posts.flatMap((post) => post.data.tags));
+const groups = usedTagGroups(usedTags);
+
 const base = url('/');
 ---
 
@@ -19,9 +27,68 @@ const base = url('/');
     <p>
       {SITE.description}这里没有算法推荐，只有按时间倒序排列的文章。
     </p>
+    <p class="hero-kicker">Code · Reading · Life</p>
   </header>
 
-  <Archive posts={posts} page={1} perPage={POSTS_PER_PAGE} />
+  {
+    featured.length > 0 && (
+      <section class="home-section" aria-labelledby="featured-heading">
+        <h2 class="home-section-title" id="featured-heading">精选文章</h2>
+        <ul class="featured-list">
+          {featured.map((post) => (
+            <li class="featured-item">
+              <a href={url(`/posts/${post.slug}/`)}>
+                <time datetime={post.data.date.toISOString()}>
+                  {formatDateShort(post.data.date)}
+                </time>
+                <h3>{post.data.title}</h3>
+                <p>{post.data.description}</p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <div class="home-section-head">
+    <h2 class="home-section-title" id="recent-heading">最近文章</h2>
+  </div>
+  <Archive posts={posts} page={1} perPage={PER_PAGE} />
+
+  {
+    groups.length > 0 && (
+      <section class="home-section" aria-labelledby="areas-heading">
+        <h2 class="home-section-title" id="areas-heading">内容领域</h2>
+        <div class="area-grid">
+          {groups.map((group) => (
+            <div class="area-card">
+              <h3>{group.name}</h3>
+              <p>{group.description}</p>
+              <ul class="tag-list">
+                {group.tags.map((tag) => (
+                  <li>
+                    <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>
+                      #{tag}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  <section class="home-section home-about" aria-labelledby="home-about-heading">
+    <h2 class="home-section-title" id="home-about-heading">关于</h2>
+    <p>
+      这里是 {SITE.name} 的个人空间，记录代码、阅读与日常思考。不追热点、不凑数量，
+      只把想清楚的东西写下来。
+    </p>
+    <a class="home-about-link" href={url('/about/')}>了解更多 →</a>
+  </section>
 </BaseLayout>
 
 <script is:inline define:vars={{ base }}>
