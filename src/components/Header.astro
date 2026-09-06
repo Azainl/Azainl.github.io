@@ -69,10 +69,12 @@ const links = [
         class="theme-toggle"
         id="theme-toggle"
         type="button"
-        aria-label="切换深浅主题"
+        aria-label="切换主题（当前：跟随系统）"
+        title="主题：跟随系统"
       >
         <Icon name="sun" class="icon-sun" />
         <Icon name="moon" class="icon-moon" />
+        <Icon name="monitor" class="icon-monitor" />
       </button>
     </div>
   </div>
@@ -96,15 +98,73 @@ const links = [
     index = data;
   });
 
-  /** 主题切换：独立于搜索框，不再挂在 #header-search 的初始化守卫里 */
+  type ThemePref = 'light' | 'dark' | 'system';
+  const THEME_ORDER: ThemePref[] = ['light', 'dark', 'system'];
+  const THEME_LABELS: Record<ThemePref, string> = {
+    light: '浅色',
+    dark: '深色',
+    system: '跟随系统',
+  };
+
+  /** 读取当前偏好：没选过或值非法都按 system 处理 */
+  function currentPref(): ThemePref {
+    const saved = localStorage.getItem('theme');
+    return saved === 'light' || saved === 'dark' ? saved : 'system';
+  }
+
+  function isDark(pref: ThemePref): boolean {
+    return (
+      pref === 'dark' ||
+      (pref === 'system' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches)
+    );
+  }
+
+  /** 按钮无障碍文本反映「当前偏好」，而不是当前实际明暗 */
+  function syncToggleLabel(pref: ThemePref): void {
+    const toggle = document.getElementById('theme-toggle');
+    if (!toggle) return;
+    const label = THEME_LABELS[pref];
+    toggle.setAttribute('aria-label', `切换主题（当前：${label}）`);
+    toggle.setAttribute('title', `主题：${label}`);
+  }
+
+  function applyTheme(pref: ThemePref): void {
+    const root = document.documentElement;
+    root.dataset.theme = pref;
+    localStorage.setItem('theme', pref);
+    root.classList.toggle('dark', isDark(pref));
+    syncToggleLabel(pref);
+  }
+
+  // 系统主题监听只需要挂一次：MediaQueryList 不随页面切换重建，
+  // 每次 initTheme 都 addEventListener 会越积越多
+  let systemBound = false;
+
+  /** 主题切换：三态循环 light → dark → system，独立于搜索框初始化 */
   function initTheme() {
     const toggle = document.getElementById('theme-toggle');
     if (!toggle || toggle.dataset.inited) return;
     toggle.dataset.inited = 'true';
+
+    // 进入页面时先把无障碍标签同步成真实偏好
+    syncToggleLabel(currentPref());
+
     toggle.addEventListener('click', () => {
-      const dark = document.documentElement.classList.toggle('dark');
-      localStorage.setItem('theme', dark ? 'dark' : 'light');
+      const next =
+        THEME_ORDER[(THEME_ORDER.indexOf(currentPref()) + 1) % THEME_ORDER.length];
+      applyTheme(next);
     });
+
+    if (!systemBound) {
+      systemBound = true;
+      window
+        .matchMedia('(prefers-color-scheme: dark)')
+        .addEventListener('change', () => {
+          // 只有 system 模式才需要实时跟随；用户显式选过就不该被系统覆盖
+          if (currentPref() === 'system') applyTheme('system');
+        });
+    }
   }
 
   /** 每次页面加载/切换后重新绑定页头交互（页头节点会被重建） */

@@ -70,13 +70,19 @@ const ogImage = new URL(url('/og.svg'), Astro.site).href;
     <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
     <ClientRouter />
     <script is:inline>
+      // 首屏同步执行，避免主题闪烁（FOUC）。
+      // 偏好三态：light / dark / system，未选择过则默认 system（跟随系统）。
       (() => {
-        document.documentElement.classList.add('js');
+        const root = document.documentElement;
+        root.classList.add('js');
         const saved = localStorage.getItem('theme');
+        const pref = saved === 'light' || saved === 'dark' ? saved : 'system';
+        root.dataset.theme = pref;
         const dark =
-          saved === 'dark' ||
-          (!saved && matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) document.documentElement.classList.add('dark');
+          pref === 'dark' ||
+          (pref === 'system' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) root.classList.add('dark');
       })();
     </script>
     {/* 各页面可选的 JSON-LD 结构化数据（文章页会塞 BlogPosting） */}
@@ -112,6 +118,12 @@ const ogImage = new URL(url('/og.svg'), Astro.site).href;
         const currentClass = document.documentElement.getAttribute('class');
         if (currentClass) {
           event.newDocument.documentElement.setAttribute('class', currentClass);
+        }
+        // data-theme 记录的是「用户偏好」，也要一起带过去，
+        // 否则切换页面后主题按钮的图标/无障碍标签会回到初始状态
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        if (currentTheme) {
+          event.newDocument.documentElement.setAttribute('data-theme', currentTheme);
         }
       });
       window.addEventListener('popstate', () => {

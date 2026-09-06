@@ -465,16 +465,26 @@ a {
   transform: rotate(90deg);
 }
 
+/* 主题按钮图标跟随「用户偏好」（light / dark / system），而不是当前实际明暗：
+   否则 system 状态下显示太阳/月亮会和它代表的语义对不上 */
+.theme-toggle .icon-sun,
 .theme-toggle .icon-moon {
   display: none;
 }
-
-.dark .theme-toggle .icon-sun {
+.theme-toggle .icon-monitor {
+  display: inline-block;
+}
+html[data-theme='light'] .theme-toggle .icon-sun {
+  display: inline-block;
+}
+html[data-theme='light'] .theme-toggle .icon-monitor {
   display: none;
 }
-
-.dark .theme-toggle .icon-moon {
+html[data-theme='dark'] .theme-toggle .icon-moon {
   display: inline-block;
+}
+html[data-theme='dark'] .theme-toggle .icon-monitor {
+  display: none;
 }
 
 /* ============================================================
