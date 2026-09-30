@@ -18,6 +18,18 @@ function stripMarkdown(md: string): string {
     .trim();
 }
 
+/**
+ * 迁移到 Pagefind 的提醒阈值。
+ *
+ * 当前实现是「整包下载 + `includes` 全串匹配」：索引体积随文章数线性增长，
+ * 每篇约 1.7 KB。24 篇时 gzip 后仅约 11 KB，完全够用；到 80 篇约 134 KB
+ * （gzip 约 38 KB）就开始值得换了——Pagefind 能分片按需加载并做中文分词。
+ *
+ * 这里只报警、不阻断构建：阈值到了就该有人做决定，但不该让发布挂掉。
+ * 迁移步骤见 docs/操作文档.md 第 6.4 节。
+ */
+const PAGEFIND_THRESHOLD = 80;
+
 export async function GET() {
   const posts = await getPublishedPosts();
 
@@ -30,6 +42,14 @@ export async function GET() {
     // 索引只需要够搜索用，正文截断避免文件随文章数线性膨胀
     content: stripMarkdown(post.body).slice(0, 2000),
   }));
+
+  if (items.length >= PAGEFIND_THRESHOLD) {
+    const kb = Math.round(JSON.stringify(items).length / 1024);
+    console.warn(
+      `[search] 文章数已达 ${items.length} 篇，search.json 约 ${kb} KB。` +
+        `该考虑迁移到 Pagefind 了（分片索引 + 中文分词），步骤见 docs/操作文档.md 6.4。`,
+    );
+  }
 
   return new Response(JSON.stringify(items), {
     headers: {
