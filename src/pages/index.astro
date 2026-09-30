@@ -5,97 +5,89 @@ import { getPublishedPosts, getFeaturedPosts } from '../utils/posts';
 import Archive from '../components/Archive.astro';
 import { url } from '../utils/url';
 import { tagSlug, usedTagGroups } from '../data/tags';
-import { formatDateShort } from '../utils/formatDate';
+import { formatDate } from '../utils/formatDate';
 
 const posts = await getPublishedPosts();
-// 首页「最近文章」展示 6 篇（规格书要求 5～8 篇），翻页行为与 URL 不变
-const featured = getFeaturedPosts(posts, 3);
 
-// 内容领域：只归类站点上真实出现过的标签，避免出现空分类或死链
-const usedTags = new Set(posts.flatMap((post) => post.data.tags));
+// 精选不再单独成块：它在列表里以「推荐」标记出现。
+// 之前「精选文章」是一个独立列表，同一篇文章会同时出现在精选和最近文章里，
+// 首页第一屏因此重复展示同一内容；标记进列表后重复消失，也不再多出一组卡片。
+const featured = getFeaturedPosts(posts, 3).map((post) => post.slug);
+
+// 报头用真实数据代替又一段自我介绍（列表是倒序的，末位即最早一篇）
+const earliest = posts[posts.length - 1];
+
+// 主题入口：沿用「内容领域」的分组，但收成导航行而不是四张一样的卡片。
+// 卡片把导航伪装成内容，还占掉一屏；标签本来就是要人点走的入口。
+const tagCounts = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) {
+    tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  }
+}
+const usedTags = new Set(tagCounts.keys());
 const groups = usedTagGroups(usedTags);
 
 const base = url('/');
 ---
 
 <BaseLayout title={SITE.title} description={SITE.description}>
-  <header class="home-hero reveal">
-    <h1>
-      写点东西，<span class="accent">留给自己</span>，
-      也留给路过的人。
-    </h1>
-    <p>
-      {SITE.description}这里没有算法推荐，只有按时间倒序排列的文章。
+  <header class="masthead">
+    <h1 class="reveal">写代码，读书，过日子。</h1>
+    <p class="reveal" style="--reveal-delay: 60ms">
+      这个博客按时间倒序排列，没有算法推荐。目前 {posts.length} 篇，
+      最早一篇写于 {formatDate(earliest.data.date)}。
     </p>
-    <p class="hero-kicker">Code · Reading · Life</p>
   </header>
 
-  {
-    featured.length > 0 && (
-      <section class="home-section" aria-labelledby="featured-heading">
-        <h2 class="home-section-title" id="featured-heading">精选文章</h2>
-        <ul class="featured-list">
-          {featured.map((post) => (
-            <li class="featured-item">
-              <a href={url(`/posts/${post.slug}/`)}>
-                <time datetime={post.data.date.toISOString()}>
-                  {formatDateShort(post.data.date)}
-                </time>
-                <h3>{post.data.title}</h3>
-                <p>{post.data.description}</p>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
-    )
-  }
-
-  <div class="home-section-head">
-    <h2 class="home-section-title" id="recent-heading">最近文章</h2>
-  </div>
-  <Archive posts={posts} page={1} perPage={PER_PAGE} />
+  <section class="home-block" aria-labelledby="posts-heading">
+    <h2 class="home-block-title reveal" id="posts-heading" style="--reveal-delay: 120ms">
+      文章
+    </h2>
+    <Archive posts={posts} page={1} perPage={PER_PAGE} featured={featured} riseBase={180} />
+  </section>
 
   {
     groups.length > 0 && (
-      <section class="home-section" aria-labelledby="areas-heading">
-        <h2 class="home-section-title" id="areas-heading">内容领域</h2>
-        <div class="area-grid">
+      <nav class="home-block home-topics" aria-labelledby="topics-heading">
+        <h2 class="home-block-title reveal" id="topics-heading">按主题</h2>
+        <dl class="topic-rows reveal">
           {groups.map((group) => (
-            <div class="area-card">
-              <h3>{group.name}</h3>
-              <p>{group.description}</p>
-              <ul class="tag-list">
-                {group.tags.map((tag) => (
-                  <li>
-                    <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>
-                      #{tag}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+            <div class="topic-row">
+              <dt>{group.name}</dt>
+              <dd>
+                <ul class="tag-list">
+                  {group.tags.map((tag) => (
+                    <li>
+                      <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>
+                        #{tag}
+                        <span class="count">{tagCounts.get(tag)}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
             </div>
           ))}
-        </div>
-      </section>
+        </dl>
+        <p class="topic-all reveal">
+          <a href={url('/tags/')}>全部 {tagCounts.size} 个主题</a>
+        </p>
+      </nav>
     )
   }
 
-  <section class="home-section home-about" aria-labelledby="home-about-heading">
-    <h2 class="home-section-title" id="home-about-heading">关于</h2>
-    <p>
-      这里是 {SITE.name} 的个人空间，记录代码、阅读与日常思考。不追热点、不凑数量，
-      只把想清楚的东西写下来。
-    </p>
-    <a class="home-about-link" href={url('/about/')}>了解更多 →</a>
-  </section>
+  <p class="colophon reveal">
+    关于这个博客和它的作者，见<a href={url('/about/')}>关于页</a>；
+    想跟进新文章可以订阅<a href={url('/rss.xml')}>RSS</a>。
+  </p>
 </BaseLayout>
 
 <script is:inline define:vars={{ base }}>
   // 兼容旧书签 / 外链里的 ?page=N 写法，统一重定向到静态分页地址 /page/N/
   (() => {
     const p = new URLSearchParams(location.search).get('page');
-    const n = p ? parseInt(p, 10) : 1;
+    const n = p ? parseInt(p, 10) : NaN;
     if (Number.isFinite(n) && n > 1) {
       location.replace(base + 'page/' + n + '/');
     } else if (p) {

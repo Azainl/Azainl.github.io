@@ -1,4 +1,36 @@
 /* ============================================================
+   全站样式表 · 目录
+   ------------------------------------------------------------
+   本文件是单一样式源（约 1840 行），下面按书写顺序分节。
+   **层叠顺序 = 书写顺序**，请勿跨节搬移规则——顺序一变，
+   优先级会静默改变，而且构建不会报错。
+
+     1. 设计令牌          :root / .dark 变量；改主题配色只动这一节
+     2. 基础              reset、排版基线、容器、链接、按钮
+     3. 页头              导航、页头搜索与弹层、主题切换
+     4. 首页              Hero
+     5. 首页区块          精选 / 最近 / 内容领域 / 关于
+     6. 标签
+     7. 搜索页
+     8. 文章页
+     9. 正文排版          .prose
+    10. 页脚
+    11. 404
+    12. 动效与可访问性    reveal、focus-visible、prefers-reduced-motion
+    13. 页面切换动画      View Transitions
+    14. 目录（TOC）       独立浮层 + 竖向进度条
+    15. 代码块            语言标签 + 复制按钮
+
+   拆分计划（暂缓，非遗忘）：
+   按上面的分节切成**连续区间**即可保持层叠顺序不变，建议切成
+   base / header / home / pages / effects / post-extras 六个文件
+   （base=1-2、header=3、home=4-5、pages=6-11、effects=12-13、post-extras=14-15）。
+   暂不落地的原因：跨文件拆分依赖 CSS @import 或多处 CSS 导入的解析顺序，
+   必须在能实际执行 npm run build 的环境里验证产物 CSS 完整且顺序正确后再做，
+   否则一旦解析顺序不符，全站样式会**静默失效**（构建不报错）。
+   ============================================================ */
+
+/* ============================================================
    设计令牌
    中性底色 + 近黑墨色 + 单一朱砂色点缀（全站锁定）
    ============================================================ */
@@ -511,154 +543,109 @@ html[data-theme='dark'] .theme-toggle .icon-monitor {
 
 /* ============================================================
    首页
+   结构：报头 → 文章列表（页面主体）→ 按主题（导航）→ 版权行
+   层级靠字号与字体族区分：报头 h1 衬线最大，区块 h2 衬线次之，
+   元信息一律无衬线小字。不再用「等宽大写小字」当每个区块的标题——
+   那会让所有区块看起来一样重要，等于没有层级。
    ============================================================ */
-.home-hero {
+.masthead {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: clamp(2.75rem, 7vw, 4rem) 1.25rem 2.5rem;
+  padding: clamp(2.5rem, 6vw, 3.5rem) 1.25rem 1.5rem;
 }
 
-.home-hero h1 {
+.masthead h1 {
   margin: 0;
   font-family: var(--font-serif);
   font-weight: 650;
-  font-size: clamp(2.1rem, 5.2vw, 3.2rem);
-  line-height: 1.28;
+  font-size: clamp(1.9rem, 4.4vw, 2.6rem);
+  line-height: 1.3;
   letter-spacing: 0.01em;
-  /* ch 以拉丁字符「0」宽度计量，中文下会算出过窄的行宽导致断行尴尬；
-     改用 em：汉字大致 1em 宽，18em ≈ 18 字/行，是标题的舒适区间 */
-  max-width: 18em;
   text-wrap: balance;
 }
 
-.home-hero p {
-  margin: 1.35rem 0 0;
+.masthead p {
+  margin: 1.1rem 0 0;
   max-width: var(--measure);
   color: var(--ink-2);
-  font-size: var(--text-lead);
-  line-height: 1.75;
+  font-size: var(--text-base);
+  line-height: 1.85;
   text-wrap: pretty;
 }
 
-/* Hero 副标题：一行等宽小字，压住节奏但不抢主标题 */
-.home-hero .hero-kicker {
-  margin-top: 1.1rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-/* ============================================================
-   首页区块：精选 / 最近 / 内容领域 / 关于
-   与 .archive 共用同一容器宽度，保证左边缘对齐
-   ============================================================ */
-.home-section,
-.home-section-head {
+/* 只做宽度约束。内边距下放到标题与导航：.archive 自带 1.25rem 内边距，
+   若这里再加一层，区块标题会比列表多缩进 1.25rem，左边缘对不齐。 */
+.home-block {
   max-width: var(--container-wide);
   margin: 0 auto;
+}
+
+.home-block-title {
+  margin: 0 0 0.9rem;
   padding: 0 1.25rem;
-}
-.home-section {
-  padding-bottom: 3.25rem;
-}
-
-.home-section-title {
-  margin: 0 0 1rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  font-family: var(--font-serif);
+  font-size: var(--text-h2);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--ink);
 }
 
-/* 精选文章：与文章列表同一套分隔线语言，只用 hover 底色做反馈 */
-.featured-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  padding-top: 0.35rem;
+/* 按主题：本质是导航，所以排成「组名 + 标签行」，不再用四张同样的卡片
+   占掉一整屏——卡片会把导航伪装成内容。 */
+.home-topics {
+  margin-top: 0.5rem;
+  padding: 2.75rem 1.25rem 2.5rem;
   border-top: 1px solid var(--line);
 }
-.featured-item {
-  border-bottom: 1px solid var(--line);
+
+.topic-rows {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
 }
-.featured-item > a {
-  display: block;
-  padding: 1.15rem 0.5rem;
-  margin: 0 -0.5rem;
-  border-radius: var(--radius);
-  transition: background-color 0.2s ease;
+
+.topic-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
 }
-.featured-item > a:hover {
-  background: var(--bg-soft);
-}
-.featured-item time {
-  font-family: var(--font-mono);
+
+.topic-row dt {
   font-size: var(--text-sm);
   color: var(--ink-3);
 }
-.featured-item h3 {
-  margin: 0.35rem 0 0;
-  font-size: var(--text-h3);
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1.45;
-  text-wrap: pretty;
-  transition: color 0.15s ease;
-}
-.featured-item p {
-  margin: 0.35rem 0 0;
-  color: var(--ink-2);
-  font-size: 1rem;
-  line-height: 1.75;
-  max-width: var(--measure);
-  text-wrap: pretty;
-}
-.featured-item > a:hover h3 {
-  color: var(--accent);
-}
 
-/* 内容领域：不用卡片堆砌，只用一条上边线做分组 */
-.area-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 1.5rem 2rem;
-}
-.area-card {
-  border-top: 1px solid var(--line-strong);
-  padding-top: 0.85rem;
-}
-.area-card h3 {
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-.area-card p {
-  margin: 0.3rem 0 0.75rem;
-  font-size: var(--text-sm);
-  color: var(--ink-2);
-  line-height: 1.7;
-}
-.area-card .tag-list {
+.topic-row dd {
   margin: 0;
 }
 
-.home-about p {
+.topic-row .tag-list {
   margin: 0;
-  max-width: var(--measure);
-  color: var(--ink-2);
-  line-height: 1.8;
-  text-wrap: pretty;
 }
-.home-about-link {
-  display: inline-block;
-  margin-top: 0.85rem;
+
+.topic-all {
+  margin: 1.15rem 0 0;
   font-size: var(--text-sm);
-  color: var(--accent);
+}
+
+/* 版权行：一行收尾。报头已经说过这个站是什么，这里不再重复自我介绍，
+   只给两条真正有用的出口。 */
+.colophon {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 4.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  line-height: 1.9;
+}
+
+@media (max-width: 640px) {
+  .topic-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
 }
 
 .archive {
@@ -716,6 +703,25 @@ html[data-theme='dark'] .theme-toggle .icon-monitor {
   transition: color 0.15s ease;
 }
 
+/* 日期列：日期 + 可选「推荐」标记。标记放在元信息列而不是标题上方——
+   标题上方的小标签是模板化的装饰，放在这里它才真的是元信息。 */
+.post-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.post-pick {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  padding: 0 0.4rem;
+}
+
 .post-row h3 {
   margin: 0;
   font-size: 1.1875rem;
@@ -751,6 +757,12 @@ html[data-theme='dark'] .theme-toggle .icon-monitor {
   }
   .post-row time {
     padding-top: 0;
+  }
+  /* 窄屏改成单列后，日期与「推荐」并排更省高度 */
+  .post-when {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
   }
   .post-row .tag-list {
     margin-left: 0;
@@ -872,7 +884,8 @@ html[data-theme='dark'] .theme-toggle .icon-monitor {
   transform: translateY(-1px);
 }
 
-.tag-cloud .tag .count {
+/* 标签计数：标签云与首页「按主题」两处共用同一套数字样式 */
+.tag .count {
   color: var(--ink-3);
   margin-left: 0.4rem;
   font-size: 0.75em;

@@ -24,6 +24,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # .astro/ 不进版本库，先同步内容集合类型，否则类型检查会找不到 astro:content
+      - name: 同步内容集合类型
+        run: npm run sync
+      # 质量门禁：astro build 不检查类型，P0 级的静默错误（如属性插值失效）
+      # 只能靠这一步拦住
+      - name: 类型检查
+        run: npm run typecheck
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

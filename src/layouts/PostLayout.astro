@@ -8,6 +8,7 @@ import { readingTime } from '../utils/readingTime';
 import { vtName } from '../utils/vtName';
 import { tagSlug } from '../data/tags';
 import { url } from '../utils/url';
+import { lastModified, ogImagePath } from '../utils/posts';
 
 interface Props {
   post: CollectionEntry<'posts'>;
@@ -24,6 +25,10 @@ const pageTitle = `${post.data.title} · ${SITE.name}`;
 // 目录：只要二级和三级标题（Astro 已用 rehype-slug 生成好 id）
 const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
 
+// 最后修订时间与「是否真的修订过」都走统一口径（见 utils/posts.ts 的 lastModified）
+const modified = lastModified(post);
+const isRevised = modified > post.data.date;
+
 const canonical = new URL(url(`/posts/${post.slug}/`), Astro.site).href;
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -31,7 +36,7 @@ const jsonLd = {
   headline: post.data.title,
   description: post.data.description,
   datePublished: post.data.date.toISOString(),
-  dateModified: (post.data.updated ?? post.data.date).toISOString(),
+  dateModified: modified.toISOString(),
   inLanguage: 'zh-CN',
   keywords: post.data.tags.join(', '),
   author: { '@type': 'Person', name: SITE.author },
@@ -40,7 +45,11 @@ const jsonLd = {
 };
 ---
 
-<BaseLayout title={pageTitle} description={post.data.description}>
+<BaseLayout
+  title={pageTitle}
+  description={post.data.description}
+  ogImage={ogImagePath(post)}
+>
   <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
   <article class="post">
     <header class="post-header reveal">
@@ -60,13 +69,13 @@ const jsonLd = {
         <span class="dot" aria-hidden="true">·</span>
         <span>{minutes} 分钟阅读</span>
         {
-          post.data.updated && (
+          isRevised && (
             <>
               <span class="dot" aria-hidden="true">·</span>
               <span>
                 更新于{' '}
-                <time datetime={post.data.updated.toISOString()}>
-                  {formatDate(post.data.updated)}
+                <time datetime={modified.toISOString()}>
+                  {formatDate(modified)}
                 </time>
               </span>
             </>

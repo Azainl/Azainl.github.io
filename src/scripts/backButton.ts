@@ -3,7 +3,7 @@
  * View Transitions 恢复原滚动位置并以 back 方向运行动画 —— "从哪来回哪去"。
  */
 // 站内返回栈：记录每次访问的路径，返回按钮据此导航
-import { isHome } from '../utils/url';
+import { isHome, url } from '../utils/url';
 import { onPageLoad } from './lifecycle';
 
 const STACK_KEY = 'blog-back-stack';
@@ -55,7 +55,7 @@ function initBackButton(): void {
     // 无站内历史（例如直接进入文章页）：回首页
     const home = document.querySelector('.wordmark') as HTMLAnchorElement | null;
     if (home) home.click();
-    else window.location.href = '/';
+    else window.location.href = url('/');
   });
 }
 

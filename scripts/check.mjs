@@ -4,7 +4,10 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
-const ROOT = dirname(fileURLToPath(new URL('..', import.meta.url)));
+// 注意：不要写成 dirname(fileURLToPath(new URL('..', import.meta.url)))——
+// fileURLToPath 会保留结尾的反斜杠（"…\blog\"），dirname 再吃掉一层就变成
+// 上一级目录，导致 .chrome-tmp* / .shots 落到项目外面。
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // 可用 CHROME_BIN 环境变量覆写 Chrome 路径，否则用默认安装位置
 const CHROME = process.env.CHROME_BIN || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 // preview 默认绑定 IPv6 localhost，浏览器/Node fetch 经 Local host 才能访问到
@@ -71,8 +74,13 @@ async function evaluate(cdp, expression) {
 }
 
 const results = [];
-const check = (name, ok, detail = '') =>
+// 失败计数：结尾会换算成退出码，CI / 脚本化验证才能据以拦截。
+// 此前只看输出不看退出码，导致 6 个 FAIL 被静默忽略了很久。
+let failed = 0;
+const check = (name, ok, detail = '') => {
+  if (!ok) failed += 1;
   results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+};
 
 await waitForDebugger();
 
@@ -520,7 +528,9 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   );
 }, '页头搜索-移动端', { width: 390, height: 844 });
 
-await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
+// 标签详情页必须用英文 slug URL（中文 URL 自 P1-5 起只是重定向桩，
+// 走它测到的是重定向页而不是标签页本身）
+await runPage(`${BASE}/tags/essays/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     h1: document.querySelector('h1')?.textContent.trim(),
     rows: document.querySelectorAll('.post-row').length,
@@ -534,6 +544,24 @@ await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
   check(`${label}: 返回链接`, r.back);
   check(`${label}: 当前标签高亮`, r.current >= 1, `${r.current} 个`);
 }, '标签详情');
+
+// 旧的中文标签 URL 是已发布的对外链接，必须继续 301 到 slug（astro.config.mjs
+// 的 redirects）；这是重定向桩而不是标签页，单独一条用例守住它
+await runPage(`${BASE}/tags/随笔/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    // meta refresh 需要时间落定，轮询等 URL 稳定
+    for (let i = 0; i < 40; i++) {
+      if (location.pathname === '/tags/essays/') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return {
+      path: location.pathname,
+      h1: document.querySelector('h1')?.textContent.trim(),
+    };
+  })()`);
+  check(`${label}: 重定向到 slug URL`, r.path === '/tags/essays/', r.path);
+  check(`${label}: 重定向后页面正常`, r.h1 === '#随笔', r.h1);
+}, '旧标签URL重定向');
 
 await runPage(`${BASE}/tags/essays/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
@@ -662,4 +690,11 @@ if (searchJsonRes.ok) {
 }
 
 console.log(results.join('\n'));
+console.log(
+  `\n${failed === 0 ? 'PASS' : 'FAIL'}  ${results.length - failed} passed, ${failed} failed, ${results.length} total`,
+);
 chrome.kill();
+// 用 exitCode 而非 process.exit()：管道下 Node 的 stdout 是异步的，
+// process.exit() 可能在 flush 前截断输出、把断言结果整段吞掉。
+// exitCode 让进程自然退出，同时给出正确的返回值。
+process.exitCode = failed === 0 ? 0 : 1;

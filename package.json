@@ -7,6 +7,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "sync": "astro sync",
+    "typecheck": "node scripts/typecheck.mjs",
+    "og": "node scripts/generate-og.mjs",
     "check": "node scripts/check.mjs",
     "screenshot": "node scripts/screenshot.mjs"
   },

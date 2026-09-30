@@ -37,7 +37,7 @@ draft: false
 所有站点配置集中在一个文件里：[`src/consts.ts`](src/consts.ts)
 
 - 站点名称、作者、简介、邮箱
-- 部署后把 `url` 改成真实域名（影响 RSS 和站点地图）
+- 部署后把 `astro.config.mjs` 的 `site` 改成真实域名（RSS、站点地图、canonical 都由它派生；`consts.ts` 里不再有 `url` 字段）
 - 站点名称同时在 [`src/components/Header.astro`](src/components/Header.astro) 的 wordmark 里
 - 页面里的示例内容（关于页、示例文章）按需替换
 

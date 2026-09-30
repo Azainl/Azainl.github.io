@@ -1,6 +1,37 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { OG_SLUGS } from '../data/og-manifest';
 
 export type Post = CollectionEntry<'posts'>;
+
+/**
+ * 文章的最后修订时间 —— 全站唯一口径。
+ *
+ * `updated` 是可选字段，目前有三处消费方：文章页的「更新于」、JSON-LD 的
+ * `dateModified`、RSS 的 `lastBuildDate`。它们都必须走这个函数，不要各自写
+ * `updated ?? date`：一旦有人填了早于 `date` 的 `updated`，各自回退就会出现
+ * 「更新于」早于发布日、`dateModified < datePublished` 这类无效数据。
+ * 这里统一保证返回值永不早于 `date`。
+ */
+export function lastModified(post: Post): Date {
+  const updated = post.data.updated;
+  return updated && updated > post.data.date ? updated : post.data.date;
+}
+
+const ogSlugs = new Set(OG_SLUGS);
+
+/**
+ * 文章分享卡片（og:image）的站内路径。
+ *
+ * 分享图由 `npm run og` 预生成到 `public/og/<slug>.png` 并提交进仓库，
+ * 不走构建期生成——这样 CI 既不需要 sharp，也不需要中文字体
+ * （GitHub Actions 的 ubuntu runner 默认没有 CJK 字体，中文会渲染成方框）。
+ *
+ * 清单缺失该 slug 时回退到全站默认图，避免 meta 指向一张 404 的图片。
+ * 新增文章后忘了跑 `npm run og` 只会退化成通用卡片，不会坏。
+ */
+export function ogImagePath(post: Post): string {
+  return ogSlugs.has(post.slug) ? `/og/${post.slug}.png` : '/og.png';
+}
 
 const TZ = 'Asia/Shanghai';
 

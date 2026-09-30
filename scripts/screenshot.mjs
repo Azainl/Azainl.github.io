@@ -5,7 +5,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
-const ROOT = dirname(fileURLToPath(new URL('..', import.meta.url)));
+// 注意：不要写成 dirname(fileURLToPath(new URL('..', import.meta.url)))——
+// fileURLToPath 会保留结尾的反斜杠（"…\blog\"），dirname 再吃掉一层就变成
+// 上一级目录，导致 .chrome-tmp* / .shots 落到项目外面。
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // 可用 CHROME_BIN 环境变量覆写 Chrome 路径，否则用默认安装位置
 const CHROME =
   process.env.CHROME_BIN || 'C:/Program Files/Google/Chrome/Application/chrome.exe';

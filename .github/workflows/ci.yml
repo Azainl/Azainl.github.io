@@ -1,0 +1,66 @@
+name: CI（质量检查）
+
+# 刻意与 deploy.yml 分开：这只是一个「体检」工作流，失败不会挡住发布。
+# 观察一段时间稳定后，如果希望它成为发布门禁，再把这里的步骤并入 deploy.yml
+# 的 build job（放在 npm run build 之前）即可。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # .astro/ 不进版本库，克隆后必须先同步内容集合类型，否则类型检查找不到 astro:content
+      - name: 同步内容集合类型
+        run: npm run sync
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 构建
+        run: npm run build
+
+      # check.mjs 是无头 Chrome + CDP 的浏览器回归（约 130 条断言）。
+      # runner 自带 Chrome，只需要告诉脚本它在哪；脚本支持 CHROME_BIN 覆盖。
+      - name: 启动预览服务器
+        run: |
+          npm run preview -- --port 4321 > preview.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:4321/ > /dev/null && echo "预览服务器就绪" && exit 0
+            sleep 1
+          done
+          echo "预览服务器 40 秒内未就绪" && cat preview.log && exit 1
+
+      - name: 浏览器回归检查
+        env:
+          BASE_URL: http://localhost:4321
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable || echo /usr/bin/google-chrome)"
+          echo "使用 Chrome: $CHROME_BIN"
+          npm run check
+
+      - name: 失败时保留预览日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-log
+          path: preview.log
+          if-no-files-found: ignore

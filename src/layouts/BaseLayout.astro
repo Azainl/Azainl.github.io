@@ -32,16 +32,21 @@ interface Props {
   description?: string;
   /** 是否为 404 页：用于跳过"路径校验"兜底刷新（见下方 ensurePageMatchesUrl） */
   notFound?: boolean;
+  /** 分享卡片图的站内路径，缺省为全站默认 /og.png（由 npm run og 生成） */
+  ogImage?: string;
 }
 
 const {
   title = SITE.title,
   description = SITE.description,
   notFound = false,
+  ogImage = '/og.png',
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
-const ogImage = new URL(url('/og.svg'), Astro.site).href;
+// 注意：必须是 PNG。Facebook / Twitter / LinkedIn 都不支持 SVG 作为 og:image，
+// 早先全站挂的是 public/og.svg，等于分享出去没有预览图。
+const ogImageUrl = new URL(url(ogImage), Astro.site).href;
 ---
 
 <!doctype html>
@@ -65,12 +70,15 @@ const ogImage = new URL(url('/og.svg'), Astro.site).href;
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={ogImage} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="zh_CN" />
-    <meta name="twitter:card" content="summary" />
+    {/* 1200×630 的横幅卡片要用 summary_large_image，summary 会被裁成小方图 */}
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image" content={ogImageUrl} />
     <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
     <ClientRouter />
