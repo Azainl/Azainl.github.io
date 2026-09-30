@@ -14,7 +14,7 @@ const CHROME = process.env.CHROME_BIN || 'C:/Program Files/Google/Chrome/Applica
 const BASE = process.env.BASE_URL || 'http://localhost:4321';
 const PORT = 9223;
 
-const chrome = spawn(CHROME, [
+const chromeArgs = [
   '--headless=new',
   '--disable-gpu',
   '--no-first-run',
@@ -22,19 +22,41 @@ const chrome = spawn(CHROME, [
   `--remote-debugging-port=${PORT}`,
   `--user-data-dir=${ROOT}/.chrome-tmp2`,
   'about:blank',
-]);
+];
+// GitHub Actions 的容器里 Chrome 常因内核沙箱与 /dev/shm 限制起不来；
+// 只在 CI 上关掉，本地保持沙箱开启，不无谓降低强度。
+if (process.env.CI) chromeArgs.unshift('--no-sandbox', '--disable-dev-shm-usage');
+
+const chrome = spawn(CHROME, chromeArgs);
+
+// 收集 Chrome 的输出：端口起不来时把它一并报出来，否则只看到一句
+// 「端口未就绪」，根本不知道是路径错、沙箱拦了还是单纯启动慢。
+let chromeLog = '';
+chrome.stderr?.on('data', (d) => { chromeLog += d.toString(); });
+chrome.stdout?.on('data', (d) => { chromeLog += d.toString(); });
+let chromeExit = null;
+chrome.on('exit', (code) => { chromeExit = code; });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 30 秒超时（原为 10 秒）。CI runner 上 Chrome 冷启动明显更慢，
+// 曾因此在 GitHub Actions 上间歇性失败，而本地与上一次 CI 都是通过的。
 async function waitForDebugger() {
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 120; i++) {
+    if (chromeExit !== null) {
+      throw new Error(
+        `Chrome 启动后立即退出（exit ${chromeExit}）。\n命令: ${CHROME} ${chromeArgs.join(' ')}\n输出:\n${chromeLog.slice(-1500)}`,
+      );
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${PORT}/json/version`);
       if (res.ok) return;
     } catch {}
     await sleep(250);
   }
-  throw new Error('Chrome DevTools 端口未就绪');
+  throw new Error(
+    `Chrome DevTools 端口 ${PORT} 在 30 秒内未就绪。\n命令: ${CHROME} ${chromeArgs.join(' ')}\n输出:\n${chromeLog.slice(-1500)}`,
+  );
 }
 
 function connect(wsUrl, onEvent) {
