@@ -1,0 +1,61 @@
+/* ============================================================
+   动效与可访问性
+   ============================================================ */
+/* 滚动进入视口时渐显；无 JS 时内容直接可见 */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.reveal {
+  transition: opacity 0.65s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0s);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* 页面切换期间，未渐显的内容保持可见，避免换页时空白 */
+html[data-astro-transition] .reveal:not(.is-visible) {
+  opacity: 1;
+  transform: none;
+}
+
+/* ============================================================
+   页面切换动画（View Transitions）
+   ============================================================ */
+@keyframes vt-page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+  }
+}
+
+::view-transition-old(root) {
+  animation: vt-page-out 0.2s ease both;
+}
+
+::view-transition-new(root) {
+  animation: vt-page-in 0.26s ease both;
+}
+
+/* 共享元素（文章标题）的飞行动画：更柔和、更从容 */
+::view-transition-group(*) {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+

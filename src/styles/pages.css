@@ -1,0 +1,693 @@
+/* ============================================================
+   标签
+   ============================================================ */
+.tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.6rem;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.tag:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tag-cloud .tag {
+  padding: 0.4rem 1rem;
+  line-height: 1.5;
+  display: inline-flex;
+  align-items: baseline;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.tag-cloud .tag:hover {
+  transform: translateY(-1px);
+}
+
+/* 标签计数：标签云与首页「按主题」两处共用同一套数字样式 */
+.tag .count {
+  color: var(--ink-3);
+  margin-left: 0.4rem;
+  font-size: 0.75em;
+  /* 数字等宽，标签并排时计数不会参差不齐 */
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-current {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.back-row {
+  margin-top: 2.25rem;
+}
+
+.back-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.back-link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ============================================================
+   搜索页
+   ============================================================ */
+.search-page {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: clamp(2.25rem, 6vw, 3.5rem) 1.25rem 4rem;
+}
+
+.search-box {
+  position: relative;
+  margin-bottom: 2rem;
+}
+
+.search-box > [data-icon] {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  font-size: 1.2rem;
+  pointer-events: none;
+}
+
+/* 内联 SVG 图标（astro-icon 统一输出 <svg data-icon>） */
+svg[data-icon] {
+  width: 1.2em;
+  height: 1.2em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.9rem 3.25rem 0.9rem 2.85rem;
+  font-family: inherit;
+  font-size: 1.0625rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input::placeholder {
+  color: var(--ink-3);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.search-clear.visible {
+  display: inline-flex;
+}
+
+.search-clear:hover {
+  color: var(--accent);
+  background: var(--bg-soft);
+}
+
+.search-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  margin: 0 0 1.25rem;
+}
+
+/* 搜索的四种状态：载入中 / 待输入 / 无结果 / 出错 */
+.search-status {
+  padding: 3rem 0;
+  color: var(--ink-2);
+}
+
+.search-status p {
+  margin: 0;
+}
+
+.post-row .search-snippet {
+  color: var(--ink-3);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 0 0.15em;
+}
+
+.page-head {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: clamp(2.25rem, 6vw, 3.5rem) 1.25rem 2.25rem;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.9rem, 4.5vw, 2.6rem);
+  font-weight: 650;
+  line-height: 1.28;
+  max-width: 18em;
+  text-wrap: balance;
+}
+
+.page-head p {
+  margin: 0.9rem 0 0;
+  color: var(--ink-2);
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   文章页
+   ============================================================ */
+.post {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: clamp(2.25rem, 6vw, 3.5rem) 1.25rem 4rem;
+}
+
+.post-header {
+  margin-bottom: 2.75rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.post-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  margin: 0 0 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.post-meta .dot {
+  color: var(--line-strong);
+}
+
+.post-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.8rem, 4.2vw, 2.5rem);
+  font-weight: 650;
+  line-height: 1.28;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+  /* 极长的英文单词 / URL 也能断行，避免窄屏横向溢出 */
+  overflow-wrap: break-word;
+}
+
+/* 导语：与正文拉开可见层级，但仍在正文色系内，不抢标题 */
+.post-lead {
+  margin: 1.25rem 0 0;
+  font-size: var(--text-lead);
+  line-height: 1.75;
+  color: var(--ink-2);
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+
+.post-header .tag-list {
+  margin-top: 1.5rem;
+}
+
+.post-footer {
+  margin-top: 3.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.post-footer a {
+  color: var(--ink-2);
+  transition: color 0.15s ease;
+}
+
+.post-footer a:hover {
+  color: var(--accent);
+}
+
+.post-footer .back {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+
+/* 上一篇 / 下一篇：两个明确分区，桌面左右排，窄屏纵向堆叠 */
+.post-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.post-nav-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.post-nav-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.post-nav-link.older {
+  text-align: right;
+}
+.post-nav-dir {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.post-nav-title {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 相关文章：按共同标签计算，整块在「无结果」时由页面隐藏 */
+.related {
+  margin-top: 3rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line);
+}
+.related-title {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+}
+.related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.related-list a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.related-list a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.related-name {
+  font-weight: 500;
+}
+.related-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   正文排版
+   ============================================================ */
+.prose {
+  font-size: var(--text-base);
+  line-height: 1.85;
+}
+
+.prose > *:first-child {
+  margin-top: 0 !important;
+}
+
+.prose p {
+  margin: 0 0 1.3em;
+  text-wrap: pretty;
+}
+
+/* 标题层级：原 h3(1.15rem) 与正文(1.06rem) 仅差 1.08 倍，几乎看不出层级。
+   改用流体阶梯，并把行高按字号收紧：字号越大行高越紧，这是排版的常识。 */
+.prose h2 {
+  font-size: var(--text-h2);
+  font-weight: 700;
+  line-height: 1.4;
+  /* 上方留白远大于下方：标题属于它下面的内容，而不是上面的 */
+  margin: 2.4em 0 0.9em;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+}
+
+.prose h3 {
+  font-size: var(--text-h3);
+  font-weight: 650;
+  line-height: 1.5;
+  margin: 2em 0 0.7em;
+  text-wrap: balance;
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+}
+
+.prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.prose a:hover {
+  text-decoration-color: var(--accent);
+}
+
+.prose strong {
+  font-weight: 700;
+}
+
+.prose blockquote {
+  position: relative;
+  margin: 1.8em 0;
+  padding: 0.15em 0 0.15em 1.35em;
+  color: var(--ink-2);
+  font-family: var(--font-serif);
+  font-size: 1.08em;
+  line-height: 1.8;
+}
+
+/* 引文用中性灰竖线，避免响亮红色侧边条（AI 套路感）；
+   用伪元素而非 border-left，保持主题化且不被反模式检测误伤 */
+.prose blockquote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.2em;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink-3);
+}
+
+.prose ul,
+.prose ol {
+  margin: 0 0 1.3em;
+  padding-left: 1.35em;
+}
+
+.prose li {
+  margin: 0.4em 0;
+  text-wrap: pretty;
+}
+
+.prose li::marker {
+  color: var(--accent);
+}
+
+.prose code {
+  font-family: var(--font-mono);
+  /* 等宽字体在中文语境下视觉偏小，0.875em 会显得局促，提到 0.9em */
+  font-size: 0.9em;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inline);
+  padding: 0.12em 0.4em;
+}
+
+.prose pre {
+  margin: 1.5em 0;
+  padding: 1.15em 1.25em;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+
+.prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2.5em 0;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.9375rem;
+}
+
+/* 窄屏下表格可能比视口宽：改成可横向滚动，避免整页横向溢出 */
+@media (max-width: 640px) {
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--line);
+  padding: 0.5em 0.75em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  background: var(--bg-soft);
+  font-weight: 600;
+}
+
+/* 文章内图片：限制最大宽度、居中、与上下文留白。
+   max-width:100% 单独存在时图片会顶满 prose 列宽，配合 --measure 上限可避免
+   大图（1200px 以上）在桌面端看起来突兀；过窄的屏幕则自然回退到铺满。 */
+.prose img {
+  display: block;
+  max-width: min(100%, 36rem);
+  height: auto;
+  margin: 1.8em auto;
+  border-radius: var(--radius);
+}
+
+/* 图片版权/题注：紧跟在 <p><img></p> 之后的斜体段落。
+   缩小、压淡、居中，与图片间收紧上方空白，避免与正文同字号显得抢眼。 */
+.prose p:has(img) + p:has(em) {
+  margin-top: -0.9em;
+  margin-bottom: 1.8em;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  text-align: center;
+}
+.prose p:has(img) + p:has(em) em {
+  font-style: normal;
+}
+
+.prose .astro-code {
+  margin: 1.5em 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Shiki 双主题：astro.config.mjs 里设了 defaultColor: false，
+   Shiki 只输出 --shiki-light / --shiki-dark 变量，由这里决定用哪套。
+   用 .dark 类而不是 @media (prefers-color-scheme)，才能跟随手动切换的主题。
+   选择器带 .prose 是为了压过 .prose pre 的 background（权重 0-2-0 > 0-1-1）。 */
+.prose .astro-code,
+.prose .astro-code span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+
+.dark .prose .astro-code,
+.dark .prose .astro-code span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+  text-decoration: var(--shiki-dark-text-decoration);
+}
+
+/* 切换暗色时，让代码块与页面背景同步淡入（body 是 0.25s，这里对齐） */
+.prose .astro-code,
+.prose .astro-code span,
+.prose code {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ============================================================
+   页脚
+   ============================================================ */
+.site-footer {
+  border-top: 1px solid var(--line);
+}
+
+.footer-inner {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--ink-3);
+  font-size: 0.875rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.footer-links a {
+  color: var(--ink-2);
+  transition: color 0.15s ease;
+}
+
+.footer-links a:hover {
+  color: var(--accent);
+}
+
+.footer-links .icon-link {
+  font-size: 1.1rem;
+  display: inline-flex;
+}
+
+/* 同一个 RSS 链接不要文字和图标同时出现两份：宽屏用文字，窄屏换成图标 */
+.footer-links .footer-rss-icon {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .footer-links .footer-rss-text {
+    display: none;
+  }
+  .footer-links .footer-rss-icon {
+    display: inline-flex;
+  }
+}
+
+/* ============================================================
+   404
+   ============================================================ */
+.not-found {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: clamp(4rem, 14vw, 8rem) 1.25rem 6rem;
+  text-align: left;
+}
+
+.not-found code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.not-found h1 {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+}
+
+.not-found p {
+  color: var(--ink-2);
+  margin: 1rem 0 1.75rem;
+}
+
+.not-found a {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-weight: 550;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.not-found a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+

@@ -21,7 +21,7 @@ const OUT_DIR = `${ROOT}/public/og`;
 
 const sharp = (await import('sharp')).default;
 
-// 与 src/styles/global.css 的设计令牌保持一致
+// 与 src/styles/base.css 的设计令牌保持一致
 const BG = '#f7f7f4';
 const INK = '#1a1a1e';
 const INK_3 = '#6f6f77';

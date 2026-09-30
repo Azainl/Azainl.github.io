@@ -1,0 +1,186 @@
+/* ============================================================
+   设计令牌
+   中性底色 + 近黑墨色 + 单一朱砂色点缀（全站锁定）
+   ============================================================ */
+:root {
+  --bg: #f7f7f4;
+  --bg-soft: #efefeb;
+  --surface: #ffffff;
+  --ink: #1a1a1e;
+  --ink-2: #55555e;
+  /* 元信息灰：原 #8b8b94 对底仅约 3.0:1，压深到 4.6:1 达 WCAG AA */
+  --ink-3: #6f6f77;
+  /* 强调朱砂红：压深到 #c5321a（对 #f7f7f4 约 5.09:1），hover/链接态文字达 WCAG AA */
+  --accent: #c5321a;
+  --accent-soft: rgba(197, 50, 26, 0.09);
+  --on-accent: #ffffff;
+  --line: rgba(26, 26, 30, 0.12);
+  --line-strong: rgba(26, 26, 30, 0.24);
+  --code-bg: #efefeb;
+  --shadow: 0 1px 2px rgba(26, 26, 30, 0.05);
+
+  /* 圆角系统：卡片/按钮 8px，标签徽章全圆，行内代码 5px */
+  --radius: 8px;
+  --radius-pill: 999px;
+  --radius-inline: 5px;
+
+  /* 字体：正文与界面用无衬线；文章标题、引用用衬线（中文回退到系统宋体） */
+  --font-sans: "Geist Variable", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Source Serif 4 Variable", "Noto Serif CJK SC",
+    "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+    Consolas, "Courier New", monospace;
+
+  /* 排版：流体字号阶梯（随视口平滑放大，移动端自动收敛） */
+  --text-sm: clamp(0.8125rem, 0.8rem + 0.08vw, 0.875rem);
+  --text-base: clamp(1.0625rem, 1.03rem + 0.18vw, 1.1875rem);
+  --text-lead: clamp(1.125rem, 1.08rem + 0.24vw, 1.3125rem);
+  --text-h3: clamp(1.1875rem, 1.13rem + 0.3vw, 1.375rem);
+  --text-h2: clamp(1.4375rem, 1.34rem + 0.5vw, 1.75rem);
+  /* 正文最佳行宽（中文约 34 字/行） */
+  --measure: 34rem;
+
+  --container: 46rem;
+  --container-wide: 58rem;
+  --header-h: 3.75rem;
+}
+
+.dark {
+  --bg: #131315;
+  --bg-soft: #1a1a1e;
+  --surface: #1d1d21;
+  --ink: #ecebe6;
+  --ink-2: #a6a6ad;
+  /* 深底上反向提亮，对 #131315 约 5.5:1，达 AA */
+  --ink-3: #8b8b94;
+  --accent: #ff5b35;
+  --accent-soft: rgba(255, 91, 53, 0.12);
+  --on-accent: #161618;
+  --line: rgba(236, 235, 230, 0.13);
+  --line-strong: rgba(236, 235, 230, 0.26);
+  --code-bg: #1a1a1e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================================
+   基础
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  overflow-y: scroll;
+  /* 粘性页头会盖住锚点目标，跳转时预留出页头高度 */
+  scroll-padding-top: calc(var(--header-h) + 1rem);
+}
+
+/* 右侧滚动条（Chrome / Edge / Firefox） */
+html {
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 8px;
+  border: 3px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* 中文排版：段落避免末行孤字；中英混排时允许长词/URL 断行不溢出 */
+p {
+  text-wrap: pretty;
+}
+
+body,
+.prose {
+  overflow-wrap: break-word;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* 跳转链接：键盘聚焦前藏在视口外，聚焦后滑入，方便无障碍用户直达正文 */
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  transform: translateY(-150%);
+  z-index: 100;
+  padding: 0.55rem 0.95rem;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.container {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+

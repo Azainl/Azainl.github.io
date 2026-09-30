@@ -1,0 +1,290 @@
+/* ============================================================
+   首页
+   结构：报头 → 文章列表（页面主体）→ 按主题（导航）→ 版权行
+   层级靠字号与字体族区分：报头 h1 衬线最大，区块 h2 衬线次之，
+   元信息一律无衬线小字。不再用「等宽大写小字」当每个区块的标题——
+   那会让所有区块看起来一样重要，等于没有层级。
+   ============================================================ */
+.masthead {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 3.5rem) 1.25rem 1.5rem;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 650;
+  font-size: clamp(1.9rem, 4.4vw, 2.6rem);
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.masthead p {
+  margin: 1.1rem 0 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+  font-size: var(--text-base);
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+
+/* 只做宽度约束。内边距下放到标题与导航：.archive 自带 1.25rem 内边距，
+   若这里再加一层，区块标题会比列表多缩进 1.25rem，左边缘对不齐。 */
+.home-block {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+}
+
+.home-block-title {
+  margin: 0 0 0.9rem;
+  padding: 0 1.25rem;
+  font-family: var(--font-serif);
+  font-size: var(--text-h2);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+/* 按主题：本质是导航，所以排成「组名 + 标签行」，不再用四张同样的卡片
+   占掉一整屏——卡片会把导航伪装成内容。 */
+.home-topics {
+  margin-top: 0.5rem;
+  padding: 2.75rem 1.25rem 2.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.topic-rows {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.topic-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
+}
+
+.topic-row dt {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+
+.topic-row dd {
+  margin: 0;
+}
+
+.topic-row .tag-list {
+  margin: 0;
+}
+
+.topic-all {
+  margin: 1.15rem 0 0;
+  font-size: var(--text-sm);
+}
+
+/* 版权行：一行收尾。报头已经说过这个站是什么，这里不再重复自我介绍，
+   只给两条真正有用的出口。 */
+.colophon {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 4.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  line-height: 1.9;
+}
+
+@media (max-width: 640px) {
+  .topic-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}
+
+.archive {
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 0 1.25rem 4rem;
+}
+
+.year-group {
+  margin-bottom: 2.75rem;
+}
+
+.year-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+  margin: 0 0 0.75rem;
+}
+
+.post-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.post-row {
+  border-top: 1px solid var(--line);
+}
+
+.post-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.post-row > a {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.5rem 1.25rem;
+  padding: 1.4rem 0.5rem;
+  margin: 0 -0.5rem;
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease;
+}
+
+.post-row > a:hover {
+  background: var(--bg-soft);
+}
+
+.post-row time {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  padding-top: 0.45rem;
+  transition: color 0.15s ease;
+}
+
+/* 日期列：日期 + 可选「推荐」标记。标记放在元信息列而不是标题上方——
+   标题上方的小标签是模板化的装饰，放在这里它才真的是元信息。 */
+.post-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.post-pick {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  padding: 0 0.4rem;
+}
+
+.post-row h3 {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  text-wrap: pretty;
+  transition: color 0.15s ease;
+}
+
+.post-row p {
+  margin: 0.4rem 0 0;
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1.75;
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+
+.post-row .tag-list {
+  margin: 0.5rem 0 0 calc(6.5rem + 1.25rem);
+}
+
+.post-row > a:hover h3,
+.post-row > a:hover time {
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .post-row > a {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+  .post-row time {
+    padding-top: 0;
+  }
+  /* 窄屏改成单列后，日期与「推荐」并排更省高度 */
+  .post-when {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .post-row .tag-list {
+    margin-left: 0;
+  }
+}
+
+/* 文章列表容器（翻页动画 .archive.paging 已随静态分页移除） */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+.page-btn {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.page-btn:hover:not([aria-disabled="true"]) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.page-btn[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.page-numbers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.page-number {
+  min-width: 2.15rem;
+  height: 2.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.page-number:hover {
+  border-color: var(--line-strong);
+}
+
+.page-number[aria-current="page"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
