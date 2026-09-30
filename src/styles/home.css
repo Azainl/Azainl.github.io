@@ -227,14 +227,15 @@
 }
 
 /* 文章列表容器（翻页动画 .archive.paging 已随静态分页移除） */
+/* 分页控件：**不要**在这里画上边线。
+   列表最后一行自带 border-bottom 收口，再补一条会形成相距仅 28px 的双线
+   （首页与 /page/N/ 都出现），看起来像误画的分割线。间距交给 margin-top。 */
 .pagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--line);
+  margin-top: 2.25rem;
   font-family: var(--font-mono);
   font-size: 0.875rem;
 }

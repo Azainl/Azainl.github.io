@@ -70,8 +70,8 @@ export interface TagGroup {
 export const TAG_GROUPS: TagGroup[] = [
   {
     name: '技术',
-    description: '前端、框架、性能与命令行实践',
-    tags: ['前端', 'Astro', '性能优化', '工具', '终端', 'SEO'],
+    description: '前端、框架、性能、命令行与发布流程',
+    tags: ['前端', 'Astro', '性能优化', '工具', '终端', 'SEO', '流程规范'],
   },
   { name: '思考', description: '关于效率与生活的零散想法', tags: ['思考', '随笔', '效率'] },
   { name: '输入', description: '读书笔记与阅读记录', tags: ['阅读'] },
