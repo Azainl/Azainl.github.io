@@ -26,4 +26,8 @@ export const OG_SLUGS: string[] = [
   'css-container-queries',
   'image-optimization',
   'focus-and-rest',
+  'social-share-image',
+  'preflight-checks',
+  'small-site',
+  'writing-short',
 ];
