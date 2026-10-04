@@ -174,9 +174,6 @@ a {
   display: none !important;
 }
 
-.accent {
-  color: var(--accent);
-}
 
 .container {
   max-width: var(--container);
