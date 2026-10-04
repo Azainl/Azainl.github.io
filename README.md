@@ -21,10 +21,12 @@ npm run preview  # 预览构建结果
 ```md
 ---
 title: "文章标题"
-description: "文章摘要，会显示在列表页和 SEO 元信息里"
+description: "文章摘要，会显示在列表页、分享卡片和 SEO 元信息里"
 date: 2026-08-03
 tags: ["标签一", "标签二"]
 draft: false
+featured: false          # 可选：true 进首页「精选文章」（建议最多 3 篇）
+updated: 2026-08-10      # 可选：最后修订日期，不能早于 date
 ---
 
 正文内容……

@@ -92,6 +92,8 @@ import { Icon } from 'astro-icon/components';
 
         const body = document.createElement('div');
         const h3 = document.createElement('h3');
+        // 与列表一致的类名：样式统一挂在 .post-row-title 上，不再依赖标签名
+        h3.className = 'post-row-title';
         h3.style.viewTransitionName = vtName(post.slug);
         highlight(h3, post.title, query);
 

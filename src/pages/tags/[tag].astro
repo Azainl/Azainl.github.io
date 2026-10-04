@@ -53,9 +53,11 @@ const posts = (await getPublishedPosts()).filter((post) =>
                 {formatDateShort(post.data.date)}
               </time>
               <div>
-                <h3 transition:name={vtName(post.slug)}>
+                {/* h2 而非 h3：本页 h1 就是标签名，文章是它下面的一级。
+                    原来写 h3 会形成 h1→h3 的跳级。 */}
+                <h2 class="post-row-title" transition:name={vtName(post.slug)}>
                   {post.data.title}
-                </h3>
+                </h2>
                 <p>{post.data.description}</p>
               </div>
             </a>

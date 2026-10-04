@@ -79,7 +79,15 @@ const jsonLd = {
     <h2 class="home-block-title reveal" id="posts-heading" style="--reveal-delay: 120ms">
       文章
     </h2>
-    <Archive posts={posts} page={1} perPage={PER_PAGE} featured={featured} riseBase={180} />
+    {/* yearLevel=3：年份属于「文章」的子分组。写成 h2 会和上面的「文章」平级 */}
+    <Archive
+      posts={posts}
+      page={1}
+      perPage={PER_PAGE}
+      featured={featured}
+      riseBase={180}
+      yearLevel={3}
+    />
   </section>
 
   {

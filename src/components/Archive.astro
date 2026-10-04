@@ -13,8 +13,20 @@ interface Props {
   featured?: string[];
   /** 入场序列的起始延迟（ms），用来和首页报头接上同一段编排 */
   riseBase?: number;
+  /**
+   * 年份标题的层级。它决定年份是 h2 还是 h3，标题跟着 +1。
+   *
+   * 默认 2：适用于 /page/N/ —— 那里有 `<h1>文章列表</h1>`，年份是它的下一级。
+   * 首页传 3：首页是 h1 报头 → h2「文章」→ 年份属于「文章」的子分组，
+   * 若也写 h2 就会和「文章」平级，语义上把年份当成了另一个顶层区块。
+   */
+  yearLevel?: 2 | 3;
 }
-const { posts, page, perPage = 4, featured = [], riseBase = 0 } = Astro.props;
+const { posts, page, perPage = 4, featured = [], riseBase = 0, yearLevel = 2 } = Astro.props;
+
+// 动态标签：Astro 里用大写变量名承载标签名字符串即可
+const YearTag = `h${yearLevel}`;
+const TitleTag = `h${yearLevel + 1}`;
 const featuredSlugs = new Set(featured);
 
 const totalPages = Math.max(1, Math.ceil(posts.length / perPage));
@@ -48,7 +60,7 @@ pagePosts.forEach((post, i) => {
   {
     years.map(([year, group], index) => (
       <div class="year-group">
-        <h2 class="year-label reveal" style={yearGroupReveal(index)}>{year}</h2>
+        <YearTag class="year-label reveal" style={yearGroupReveal(index)}>{year}</YearTag>
         <ol class="post-list">
           {group.map((post) => (
             <li class="post-row reveal" style={`--reveal-delay: ${rowDelay.get(post.slug)}ms`}>
@@ -60,7 +72,9 @@ pagePosts.forEach((post, i) => {
                   {featuredSlugs.has(post.slug) && <span class="post-pick">推荐</span>}
                 </div>
                 <div>
-                  <h3 transition:name={vtName(post.slug)}>{post.data.title}</h3>
+                  <TitleTag class="post-row-title" transition:name={vtName(post.slug)}>
+                    {post.data.title}
+                  </TitleTag>
                   <p>{post.data.description}</p>
                 </div>
               </a>

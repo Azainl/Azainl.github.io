@@ -179,7 +179,10 @@
   padding: 0 0.4rem;
 }
 
-.post-row h3 {
+/* 列表标题的样式挂在类名上，不挂标签名：
+   首页/分页页用 h4 与 h3（层级随年份而定），标签详情页用 h2，
+   搜索结果是 JS 生成的 h3 —— 三种标签共用一个类名才不会被改标签时漏掉。 */
+.post-row .post-row-title {
   margin: 0;
   font-size: 1.1875rem;
   font-weight: 650;
@@ -202,7 +205,7 @@
   margin: 0.5rem 0 0 calc(6.5rem + 1.25rem);
 }
 
-.post-row > a:hover h3,
+.post-row > a:hover .post-row-title,
 .post-row > a:hover time {
   color: var(--accent);
 }
