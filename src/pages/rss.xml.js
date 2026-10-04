@@ -5,6 +5,18 @@ import { SITE } from '../consts';
 import { getPublishedPosts, lastModified } from '../utils/posts';
 
 /**
+ * 订阅源里保留的文章数上限。
+ *
+ * 本站输出的是**全文**订阅（`content:encoded`），每篇约 5 KB，而且阅读器每次
+ * 轮询都会拉整个 feed —— 不设上限的话它会随文章数线性膨胀：
+ * 28 篇 140 KB，到 100 篇就是约 500 KB（gzip 115 KB）。
+ * 截断后体积恒定，旧文章仍然可以从站点上读到，只是不再进订阅流。
+ *
+ * 调大/调小都只影响 `rss.xml`，不影响页面、sitemap 或搜索索引。
+ */
+const FEED_LIMIT = 30;
+
+/**
  * 把正文里的站内绝对路径补成完整 URL。
  * RSS 阅读器渲染的页面不在本站域下，`/images/x.jpg`、`/posts/xxx/` 这种
  * 以 / 开头的地址在阅读器里会解析到错误的域名而 404。
@@ -61,11 +73,14 @@ export async function GET(context) {
       ? `<lastBuildDate>${lastBuildDate.toUTCString()}</lastBuildDate>`
       : '');
 
+  // 只取最近的若干篇进订阅流（posts 已按日期倒序）
+  const feedPosts = posts.slice(0, FEED_LIMIT);
+
   return rss({
     title: SITE.title,
     description: SITE.description,
     site: context.site,
-    items: posts.map((post) => ({
+    items: feedPosts.map((post) => ({
       title: post.data.title,
       pubDate: post.data.date,
       description: post.data.description,
