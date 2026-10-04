@@ -29,9 +29,44 @@ const usedTags = new Set(tagCounts.keys());
 const groups = usedTagGroups(usedTags);
 
 const base = url('/');
+
+// 首页的结构化数据：此前只有文章页有 BlogPosting，首页什么都没有。
+// 这里声明「站点」与「作者」两个实体，让搜索引擎知道这个站是谁的。
+const siteUrl = new URL('/', Astro.site).href;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      name: SITE.title,
+      alternateName: SITE.name,
+      url: siteUrl,
+      description: SITE.description,
+      inLanguage: SITE.locale,
+      author: { '@type': 'Person', name: SITE.author },
+      // /search/ 确实支持 ?q= 预填（与搜索页读取的参数一致）
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: `${new URL(url('/search/'), Astro.site).href}?q={search_term_string}`,
+        },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@type': 'Person',
+      name: SITE.author,
+      url: siteUrl,
+      // 不放 email：关于页已经写明，没必要再交给爬虫一份结构化联系方式
+      description: SITE.description,
+    },
+  ],
+};
 ---
 
 <BaseLayout title={SITE.title} description={SITE.description}>
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
   <header class="masthead">
     <h1 class="reveal">写代码，读书，过日子。</h1>
     <p class="reveal" style="--reveal-delay: 60ms">
