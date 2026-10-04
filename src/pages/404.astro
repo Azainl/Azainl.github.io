@@ -4,7 +4,12 @@ import { SITE } from '../consts';
 import { url } from '../utils/url';
 ---
 
-<BaseLayout title={`页面不存在 · ${SITE.name}`} description="你要找的页面不存在。" notFound>
+<BaseLayout
+  title={`页面不存在 · ${SITE.name}`}
+  description="你要找的页面不存在。"
+  notFound
+  noindex
+>
   <div class="not-found reveal">
     <code>404 NOT_FOUND</code>
     <h1>页面走丢了</h1>

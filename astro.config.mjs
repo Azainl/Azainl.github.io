@@ -57,6 +57,9 @@ export default defineConfig({
   site: 'https://azainl.github.io',
   integrations: [
     sitemap({
+      // noindex 的页面不该同时出现在 sitemap 里 —— 那是自相矛盾的信号。
+      // 目前只有站内搜索页：它是工具而非内容，初始状态下没有独有信息。
+      filter: (page) => !page.endsWith('/search/'),
       // 不输出 lastmod 的话，搜索引擎无法判断页面新鲜度 —— 而我们明明有每篇的
       // date / updated。这里按页面类型分别给：文章用自身日期，列表类用最新文章日期，
       // 关于页/搜索页没有可靠的时间语义，就不给（宁可缺，也不要给假的）。

@@ -34,6 +34,12 @@ interface Props {
   notFound?: boolean;
   /** 分享卡片图的站内路径，缺省为全站默认 /og.png（由 npm run og 生成） */
   ogImage?: string;
+  /**
+   * 不该被收录的页面（404、站内搜索页）。会输出 `noindex`，并且
+   * **不输出 canonical** —— 404 的 canonical 会指向一个并不存在的 /404/，
+   * 比完全没有更糟（等于主动告诉搜索引擎去收录一个死地址）。
+   */
+  noindex?: boolean;
 }
 
 const {
@@ -41,9 +47,13 @@ const {
   description = SITE.description,
   notFound = false,
   ogImage = '/og.png',
+  noindex = false,
 } = Astro.props;
 
-const canonical = new URL(Astro.url.pathname, Astro.site).href;
+// 本页自身的绝对地址：og:url 始终用它。
+const pageUrl = new URL(Astro.url.pathname, Astro.site).href;
+// <link rel="canonical"> 只在可收录时输出。
+const canonical = noindex ? null : pageUrl;
 // 注意：必须是 PNG。Facebook / Twitter / LinkedIn 都不支持 SVG 作为 og:image，
 // 早先全站挂的是 public/og.svg，等于分享出去没有预览图。
 const ogImageUrl = new URL(url(ogImage), Astro.site).href;
@@ -58,7 +68,8 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/svg+xml" href={url('/favicon.svg')} />
-    <link rel="canonical" href={canonical} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    {noindex && <meta name="robots" content="noindex" />}
     <link rel="alternate" type="application/rss+xml" title={SITE.title} href={url('/rss.xml')} />
     <link rel="preload" href={geistUrl} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={serifUrl} as="font" type="font/woff2" crossorigin />
@@ -69,7 +80,7 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
+    <meta property="og:url" content={pageUrl} />
     <meta property="og:image" content={ogImageUrl} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
