@@ -30,7 +30,7 @@ const ogSlugs = new Set(OG_SLUGS);
  * 新增文章后忘了跑 `npm run og` 只会退化成通用卡片，不会坏。
  */
 export function ogImagePath(post: Post): string {
-  return ogSlugs.has(post.slug) ? `/og/${post.slug}.png` : '/og.png';
+  return ogSlugs.has(post.id) ? `/og/${post.id}.png` : '/og.png';
 }
 
 const TZ = 'Asia/Shanghai';
@@ -40,7 +40,7 @@ const TZ = 'Asia/Shanghai';
  *
  * - 生产环境：排除 draft，也排除未来日期（date 大于构建时刻的文章不上线）
  * - 开发环境：只看 draft，未来日期的文章照常显示，方便本地预览定时发布
- * - 排序：日期倒序；同日按 slug 兜底，保证不同机器上构建出的顺序一致
+ * - 排序：日期倒序；同日按 id（即文件名）兜底，保证不同机器上构建出的顺序一致
  */
 export async function getPublishedPosts(): Promise<Post[]> {
   const prod = import.meta.env.PROD;
@@ -55,7 +55,7 @@ export async function getPublishedPosts(): Promise<Post[]> {
   return posts.sort(
     (a, b) =>
       b.data.date.valueOf() - a.data.date.valueOf() ||
-      a.slug.localeCompare(b.slug),
+      a.id.localeCompare(b.id),
   );
 }
 
@@ -78,7 +78,7 @@ export function getRelatedPosts(
   if (tags.size === 0) return [];
 
   return posts
-    .filter((post) => post.slug !== current.slug)
+    .filter((post) => post.id !== current.id)
     .map((post) => {
       const shared = post.data.tags.filter((tag) => tags.has(tag)).length;
       return { post, score: shared + (post.data.featured ? 0.5 : 0) };
@@ -88,7 +88,7 @@ export function getRelatedPosts(
       (a, b) =>
         b.score - a.score ||
         b.post.data.date.valueOf() - a.post.data.date.valueOf() ||
-        a.post.slug.localeCompare(b.post.slug),
+        a.post.id.localeCompare(b.post.id),
     )
     .slice(0, limit)
     .map((entry) => entry.post);
@@ -99,7 +99,7 @@ export function getNeighbors(
   posts: Post[],
   slug: string,
 ): { newer: Post | null; older: Post | null } {
-  const i = posts.findIndex((post) => post.slug === slug);
+  const i = posts.findIndex((post) => post.id === slug);
   if (i < 0) return { newer: null, older: null };
   return {
     newer: i > 0 ? posts[i - 1] : null,

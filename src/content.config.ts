@@ -1,7 +1,13 @@
-import { defineCollection, z } from 'astro:content';
+// Astro 7 移除了 legacy content collections（`type: 'content'`），
+// 改用 Content Layer API：必须显式给一个 loader。
+// `z` 也从 `astro:content` 挪到了 `astro/zod`。
+import { defineCollection } from 'astro:content';
+import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
 
 const posts = defineCollection({
-  type: 'content',
+  // 文件的 slug 由文件名推导，与旧的 `type: 'content'` 行为一致
+  loader: glob({ pattern: '**/*.md', base: './src/content/posts' }),
   schema: z.object({
     title: z.string(),
     description: z.string(),

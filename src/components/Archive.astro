@@ -52,7 +52,7 @@ const yearGroupReveal = (index: number) => `--reveal-delay: ${riseBase + Math.mi
 // 延迟在 frontmatter 里一次算好，模板里只做查表（不引入渲染期自增副作用）。
 const rowDelay = new Map<string, number>();
 pagePosts.forEach((post, i) => {
-  rowDelay.set(post.slug, riseBase + 80 + Math.min(i * 45, 600));
+  rowDelay.set(post.id, riseBase + 80 + Math.min(i * 45, 600));
 });
 ---
 
@@ -63,16 +63,16 @@ pagePosts.forEach((post, i) => {
         <YearTag class="year-label reveal" style={yearGroupReveal(index)}>{year}</YearTag>
         <ol class="post-list">
           {group.map((post) => (
-            <li class="post-row reveal" style={`--reveal-delay: ${rowDelay.get(post.slug)}ms`}>
-              <a href={url(`/posts/${post.slug}/`)}>
+            <li class="post-row reveal" style={`--reveal-delay: ${rowDelay.get(post.id)}ms`}>
+              <a href={url(`/posts/${post.id}/`)}>
                 <div class="post-when">
                   <time datetime={post.data.date.toISOString()}>
                     {formatDateShort(post.data.date)}
                   </time>
-                  {featuredSlugs.has(post.slug) && <span class="post-pick">推荐</span>}
+                  {featuredSlugs.has(post.id) && <span class="post-pick">推荐</span>}
                 </div>
                 <div>
-                  <TitleTag class="post-row-title" transition:name={vtName(post.slug)}>
+                  <TitleTag class="post-row-title" transition:name={vtName(post.id)}>
                     {post.data.title}
                   </TitleTag>
                   <p>{post.data.description}</p>
