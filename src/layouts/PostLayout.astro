@@ -9,6 +9,8 @@ import { vtName } from '../utils/vtName';
 import { tagSlug } from '../data/tags';
 import { url } from '../utils/url';
 import { lastModified, ogImagePath } from '../utils/posts';
+// Astro 7：条目方法 post.render() 换成了具名导出 render(post)
+import { render } from 'astro:content';
 
 interface Props {
   post: CollectionEntry<'posts'>;
@@ -18,8 +20,9 @@ interface Props {
 }
 
 const { post, newer, older, related = [] } = Astro.props;
-const { Content, headings } = await post.render();
-const minutes = readingTime(post.body);
+const { Content, headings } = await render(post);
+// Content Layer API 里 body 可能为 undefined（只有 data 的条目），给个兜底
+const minutes = readingTime(post.body ?? '');
 const pageTitle = `${post.data.title} · ${SITE.name}`;
 
 // 目录：只要二级和三级标题（Astro 已用 rehype-slug 生成好 id）
@@ -29,7 +32,7 @@ const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
 const modified = lastModified(post);
 const isRevised = modified > post.data.date;
 
-const canonical = new URL(url(`/posts/${post.slug}/`), Astro.site).href;
+const canonical = new URL(url(`/posts/${post.id}/`), Astro.site).href;
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BlogPosting',
@@ -82,7 +85,7 @@ const jsonLd = {
           )
         }
       </p>
-      <h1 class="post-title" transition:name={vtName(post.slug)}>
+      <h1 class="post-title" transition:name={vtName(post.id)}>
         {post.data.title}
       </h1>
       <p class="post-lead">{post.data.description}</p>
@@ -144,7 +147,7 @@ const jsonLd = {
           <ul class="related-list">
             {related.map((r) => (
               <li>
-                <a href={url(`/posts/${r.slug}/`)}>
+                <a href={url(`/posts/${r.id}/`)}>
                   <span class="related-name">{r.data.title}</span>
                   <time class="related-meta" datetime={r.data.date.toISOString()}>
                     {formatDate(r.data.date)}
@@ -161,7 +164,7 @@ const jsonLd = {
       <nav class="post-nav" aria-label="上一篇和下一篇">
         {
           newer && (
-            <a class="post-nav-link newer" href={url(`/posts/${newer.slug}/`)}>
+            <a class="post-nav-link newer" href={url(`/posts/${newer.id}/`)}>
               <span class="post-nav-dir">更新的文章</span>
               <span class="post-nav-title">{newer.data.title}</span>
             </a>
@@ -169,7 +172,7 @@ const jsonLd = {
         }
         {
           older && (
-            <a class="post-nav-link older" href={url(`/posts/${older.slug}/`)}>
+            <a class="post-nav-link older" href={url(`/posts/${older.id}/`)}>
               <span class="post-nav-dir">更早的文章</span>
               <span class="post-nav-title">{older.data.title}</span>
             </a>

@@ -34,13 +34,14 @@ export async function GET() {
   const posts = await getPublishedPosts();
 
   const items = posts.map((post) => ({
-    slug: post.slug,
+    slug: post.id,
     title: post.data.title,
     description: post.data.description,
     date: post.data.date.toISOString(),
     tags: post.data.tags,
     // 索引只需要够搜索用，正文截断避免文件随文章数线性膨胀
-    content: stripMarkdown(post.body).slice(0, 2000),
+    // Content Layer API 里 body 是 string | undefined（条目也可能只有 data）
+    content: stripMarkdown(post.body ?? '').slice(0, 2000),
   }));
 
   if (items.length >= PAGEFIND_THRESHOLD) {

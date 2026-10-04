@@ -2,7 +2,7 @@
 import type { GetStaticPaths } from 'astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { SITE, PER_PAGE } from '../../consts';
-import { getPublishedPosts } from '../../utils/posts';
+import { getPublishedPosts, getFeaturedPosts } from '../../utils/posts';
 import Archive from '../../components/Archive.astro';
 
 export const getStaticPaths = (async () => {
@@ -19,6 +19,10 @@ export const getStaticPaths = (async () => {
 
 const { posts, totalPages } = Astro.props;
 const current = Number(Astro.params.page);
+
+// 「推荐」标记要在文章出现的**每一处**都显示，否则精选的几篇一旦跌出第 1 页，
+// 标记就在全站任何地方都看不到了（2026-09 新增 4 篇后就是这样）。
+const featured = getFeaturedPosts(posts, 3).map((post) => post.id);
 ---
 
 <BaseLayout
@@ -30,5 +34,5 @@ const current = Number(Astro.params.page);
     <p>第 {current} 页，共 {totalPages} 页。按时间倒序排列。</p>
   </header>
 
-  <Archive posts={posts} page={current} perPage={PER_PAGE} />
+  <Archive posts={posts} page={current} perPage={PER_PAGE} featured={featured} />
 </BaseLayout>

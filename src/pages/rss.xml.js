@@ -43,7 +43,7 @@ export async function GET(context) {
     contents = new Map();
     for (const post of posts) {
       const { Content } = await render(post);
-      contents.set(post.slug, absolutize(await container.renderToString(Content), site));
+      contents.set(post.id, absolutize(await container.renderToString(Content), site));
     }
   } catch (error) {
     contents = null;
@@ -84,9 +84,9 @@ export async function GET(context) {
       title: post.data.title,
       pubDate: post.data.date,
       description: post.data.description,
-      link: new URL(`/posts/${post.slug}/`, context.site).href,
+      link: new URL(`/posts/${post.id}/`, context.site).href,
       categories: post.data.tags,
-      ...(contents ? { content: contents.get(post.slug) } : {}),
+      ...(contents ? { content: contents.get(post.id) } : {}),
     })),
     customData,
   });

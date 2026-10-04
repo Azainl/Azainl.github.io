@@ -12,7 +12,7 @@ const posts = await getPublishedPosts();
 // 精选不再单独成块：它在列表里以「推荐」标记出现。
 // 之前「精选文章」是一个独立列表，同一篇文章会同时出现在精选和最近文章里，
 // 首页第一屏因此重复展示同一内容；标记进列表后重复消失，也不再多出一组卡片。
-const featured = getFeaturedPosts(posts, 3).map((post) => post.slug);
+const featured = getFeaturedPosts(posts, 3).map((post) => post.id);
 
 // 报头用真实数据代替又一段自我介绍（列表是倒序的，末位即最早一篇）
 const earliest = posts[posts.length - 1];
