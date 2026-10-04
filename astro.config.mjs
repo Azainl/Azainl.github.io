@@ -1,10 +1,83 @@
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import icon from 'astro-icon';
+import { readdirSync, readFileSync } from 'node:fs';
+
+/**
+ * 构建期读一遍文章的 frontmatter，给 sitemap 提供 `lastmod`。
+ *
+ * 为什么要在这里读文件：`@astrojs/sitemap` 的 `serialize` 在配置加载期就要
+ * 拿到日期，而 Content Collections 要等 Astro 运行时才有。这里只解析
+ * frontmatter 里的 date / updated / tags 三个字段，够用且不必引入运行时依赖。
+ */
+function readPosts() {
+  const dir = new URL('./src/content/posts/', import.meta.url);
+  const posts = [];
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    const text = readFileSync(new URL(name, dir), 'utf8');
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
+    const pick = (key) =>
+      new RegExp(`^${key}:\\s*"?(.*?)"?\\s*$`, 'm').exec(fm)?.[1] ?? '';
+    // 有 updated 就用 updated —— 与文章页「更新于」、RSS lastBuildDate 同一口径
+    const date = pick('updated') || pick('date');
+    if (!date) continue;
+    let tags = [];
+    try {
+      tags = JSON.parse(pick('tags') || '[]');
+    } catch {}
+    posts.push({ slug: name.replace(/\.md$/, ''), date, tags });
+  }
+  return posts;
+}
+
+/** 标签名 → slug 映射（与 src/data/tags.ts 保持同源；这里只做正则提取，不 import .ts） */
+function readTagSlugs() {
+  const src = readFileSync(new URL('./src/data/tags.ts', import.meta.url), 'utf8');
+  const map = new Map();
+  for (const m of src.matchAll(/\{\s*name:\s*'([^']+)',\s*slug:\s*'([^']+)'/g)) {
+    map.set(m[2], m[1]); // slug -> 展示名
+  }
+  return map;
+}
+
+const POSTS = readPosts();
+const TAG_SLUGS = readTagSlugs();
+const NEWEST = POSTS.reduce((acc, p) => (p.date > acc ? p.date : acc), '');
+
+/** 某标签下最新一篇的日期 */
+function newestForTag(name) {
+  return POSTS.filter((p) => p.tags.includes(name)).reduce(
+    (acc, p) => (p.date > acc ? p.date : acc),
+    '',
+  );
+}
 
 export default defineConfig({
   site: 'https://azainl.github.io',
-  integrations: [sitemap(), icon()],
+  integrations: [
+    sitemap({
+      // 不输出 lastmod 的话，搜索引擎无法判断页面新鲜度 —— 而我们明明有每篇的
+      // date / updated。这里按页面类型分别给：文章用自身日期，列表类用最新文章日期，
+      // 关于页/搜索页没有可靠的时间语义，就不给（宁可缺，也不要给假的）。
+      serialize(item) {
+        const path = new URL(item.url).pathname;
+        let lastmod;
+
+        const post = POSTS.find((p) => path === `/posts/${p.slug}/`);
+        if (post) lastmod = post.date;
+        else if (path === '/' || path === '/tags/' || /^\/page\/\d+\/$/.test(path)) lastmod = NEWEST;
+        else {
+          const tag = /^\/tags\/([^/]+)\/$/.exec(path);
+          if (tag && TAG_SLUGS.has(tag[1])) lastmod = newestForTag(TAG_SLUGS.get(tag[1]));
+        }
+
+        if (lastmod) item.lastmod = lastmod;
+        return item;
+      },
+    }),
+    icon(),
+  ],
   // 旧的文章 URL（汉字/空格文件名）重定向到新的 kebab-case 文件名，避免已发出的 RSS / 外链 404
   redirects: {
     '/posts/Astro 博客图片优化实践/': '/posts/astro-image-optimization/',
