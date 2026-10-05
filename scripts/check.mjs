@@ -1,6 +1,7 @@
 // 临时验证脚本：在真实浏览器环境里对页面做布局与功能断言。
 // 用法：先在另一个终端跑 `npm run dev`（或 `npm run preview`），再执行 `npm run check`
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
@@ -27,7 +28,60 @@ const chromeArgs = [
 // 只在 CI 上关掉，本地保持沙箱开启，不无谓降低强度。
 if (process.env.CI) chromeArgs.unshift('--no-sandbox', '--disable-dev-shm-usage');
 
+
+// Chrome 被强杀后会在 profile 目录里留下 SingletonLock 等文件。下一个实例看到锁，
+// 会认为已有实例在运行，于是把请求「移交」过去并**自己立刻 exit 0** ——
+// 表现为「启动后立即退出」，且不打印任何输出，极难排查（本项目实际踩到过）。
+// 每次运行前把 profile 目录清掉，从根上避免。
+const PROFILE_DIR = `${ROOT}/.chrome-tmp2`;
+// 上一个实例可能还占着目录，删不掉也不算致命（Chrome 自己会处理）
+try {
+  rmSync(PROFILE_DIR, { recursive: true, force: true });
+} catch { /* 忽略 */ }
+
 const chrome = spawn(CHROME, chromeArgs);
+
+/**
+ * 结束 Chrome 及其**整棵进程树**。
+ *
+ * Windows 上 `chrome.kill()` 只终止主进程，渲染进程会残留并继续占着
+ * `--user-data-dir` 与 `--remote-debugging-port`；下一次运行就会卡在
+ * 「Chrome DevTools 端口未就绪」（实测残留过 8 个进程）。用 taskkill /T 连子树一起结束。
+ */
+const PROFILE_TAG = PROFILE_DIR.slice(PROFILE_DIR.lastIndexOf('/') + 1); // .chrome-tmp2
+
+function killChromeTree() {
+  try {
+    if (process.platform === 'win32') {
+      // 不能按 spawn 返回的 pid 杀：Windows 上 chrome.exe 会「自重启」——
+      // 初次进程立刻 exit 0，真正的浏览器在另外的进程里继续跑。
+      // 按 profile 目录名反查进程，才杀得干净。
+      spawnSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${PROFILE_TAG}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+        ],
+        { stdio: 'ignore' },
+      );
+    } else {
+      chrome.kill('SIGKILL');
+    }
+  } catch {
+    // 收尾失败不该影响断言结果
+  }
+}
+
+// 提前抛错（例如端口等待超时）时同样要收尾，否则会攒下游离进程
+process.on('exit', killChromeTree);
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    killChromeTree();
+    process.exit(1);
+  });
+}
+
 
 // 收集 Chrome 的输出：端口起不来时把它一并报出来，否则只看到一句
 // 「端口未就绪」，根本不知道是路径错、沙箱拦了还是单纯启动慢。
@@ -43,11 +97,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 曾因此在 GitHub Actions 上间歇性失败，而本地与上一次 CI 都是通过的。
 async function waitForDebugger() {
   for (let i = 0; i < 120; i++) {
-    if (chromeExit !== null) {
-      throw new Error(
-        `Chrome 启动后立即退出（exit ${chromeExit}）。\n命令: ${CHROME} ${chromeArgs.join(' ')}\n输出:\n${chromeLog.slice(-1500)}`,
-      );
-    }
+    // 注意：**不能**因为 chrome.on('exit') 触发就判定失败 —— Windows 上
+    // chrome.exe 会自重启，初次进程立刻 exit 0 而浏览器照常运行。
+    // 只把退出码作为超时时的诊断信息。
     try {
       const res = await fetch(`http://127.0.0.1:${PORT}/json/version`);
       if (res.ok) return;
@@ -55,7 +107,8 @@ async function waitForDebugger() {
     await sleep(250);
   }
   throw new Error(
-    `Chrome DevTools 端口 ${PORT} 在 30 秒内未就绪。\n命令: ${CHROME} ${chromeArgs.join(' ')}\n输出:\n${chromeLog.slice(-1500)}`,
+    `Chrome DevTools 端口 ${PORT} 在 30 秒内未就绪。\n命令: ${CHROME} ${chromeArgs.join(' ')}\n` +
+      `进程退出码: ${chromeExit ?? '(仍在运行)'}\n输出:\n${chromeLog.slice(-1500)}`,
   );
 }
 
@@ -715,7 +768,7 @@ console.log(results.join('\n'));
 console.log(
   `\n${failed === 0 ? 'PASS' : 'FAIL'}  ${results.length - failed} passed, ${failed} failed, ${results.length} total`,
 );
-chrome.kill();
+killChromeTree();
 // 用 exitCode 而非 process.exit()：管道下 Node 的 stdout 是异步的，
 // process.exit() 可能在 flush 前截断输出、把断言结果整段吞掉。
 // exitCode 让进程自然退出，同时给出正确的返回值。
