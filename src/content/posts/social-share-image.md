@@ -7,7 +7,7 @@ tags: ["前端", "SEO", "性能优化"]
 
 一篇文章写得再好，如果分享出去的链接只是光秃秃一行字，点开的人总要少一些。那张预览图（`og:image`）不参与阅读，却决定了别人愿不愿意点。
 
-![桌面上的笔记本与手机](/images/share-card.jpg)
+![桌面上的笔记本与手机](../../assets/images/share-card.jpg)
 
 *题图来自 Unsplash，摄影 Aleksi Tappura*
 

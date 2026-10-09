@@ -9,7 +9,7 @@ tags: ["随笔", "思考"]
 
 我也想过。但最后，这个站选择了不长大。
 
-![安静的桌面一角](/images/small-desk-1.jpg)
+![安静的桌面一角](../../assets/images/small-desk-1.jpg)
 
 *题图来自 Unsplash，摄影 Alejandro Escamilla*
 

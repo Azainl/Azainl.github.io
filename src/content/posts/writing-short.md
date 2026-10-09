@@ -9,7 +9,7 @@ tags: ["写作", "思考"]
 
 长是安全的——多写几句解释，总不会错。短是有风险的，每一句都得承担它该承担的意思。下面是我删自己稿子时常用的几条笨办法。
 
-![摊开的笔记本与笔](/images/notebook-1.jpg)
+![摊开的笔记本与笔](../../assets/images/notebook-1.jpg)
 
 *题图来自 Unsplash，摄影 Galymzhan Abdugalimov*
 

@@ -10,7 +10,7 @@ featured: true
 
 但我越来越倾向于反方向：把一套工具用旧，而不是追着换新。
 
-![用旧的工作台](/images/desk-1.jpg)
+![用旧的工作台](../../assets/images/desk-1.jpg)
 
 *题图来自 Flickr，CC 授权*
 

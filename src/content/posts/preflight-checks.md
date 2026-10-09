@@ -7,7 +7,7 @@ tags: ["流程规范", "效率", "Astro"]
 
 每次改完东西，从"我觉得改好了"到真的按下发布，中间有一段很容易被忽略的时间。以前我靠记忆逐项确认：首页看了吗、深色模式看了吗、链接点得开吗。结果是——一定会漏。
 
-![键盘与台灯的工作台](/images/checks-1.jpg)
+![键盘与台灯的工作台](../../assets/images/checks-1.jpg)
 
 *题图来自 Unsplash，摄影 Rayi Christian Wicaksono*
 

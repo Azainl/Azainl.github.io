@@ -2,6 +2,8 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import icon from 'astro-icon';
 import { readdirSync, readFileSync } from 'node:fs';
+import { satteri } from '@astrojs/markdown-satteri';
+import markdownImageSizes from './plugins/markdown-image-sizes.mjs';
 
 /**
  * 构建期读一遍文章的 frontmatter，给 sitemap 提供 `lastmod`。
@@ -109,7 +111,22 @@ export default defineConfig({
     prefetchAll: true,
     defaultStrategy: 'viewport',
   },
+  image: {
+    // 正文图最大显示宽度是 36rem = 576px（见 pages.css 的 .prose img），
+    // 而原图是 1152px —— 1x 屏白下了一倍的字节。constrained 会按布局生成
+    // srcset/sizes，让不同 DPR 与视口各取所需；responsiveStyles 注入配套 CSS。
+    layout: 'constrained',
+    responsiveStyles: true,
+    // 只输出 webp：avif 需另装 @astrojs/… 才能进响应式集合，且体积优势有限
+    // （实测 46.2 KB → webp 31.1 / avif 20.2，但要付出构建时间与兼容成本）
+    // 需要时可加 'avif'，astro 会自动生成 <picture> 回退链。
+  },
   markdown: {
+    // Markdown 图片的 sizes 默认按原图宽度生成，与 CSS 的 36rem 上限不符，
+    // 会让桌面端白下约一倍字节。用 Sätteri 的原生 hastPlugin 改成真实显示宽度
+    //（不能用 markdown.rehypePlugins —— 那会要求装回 @astrojs/markdown-remark
+    //  并把整个处理器退回 unified，见插件内注释）。
+    processor: satteri({ hastPlugins: [markdownImageSizes()] }),
     shikiConfig: {
       // 注意：双主题的键名是 themes（复数）；写成 theme 会静默回退到 Shiki 默认主题
       themes: {
