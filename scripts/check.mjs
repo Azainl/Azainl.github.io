@@ -767,6 +767,13 @@ if (searchJsonRes.ok) {
 // ---- 页面切换动画（View Transitions）----
 // 这几项是"改了样式但看不出坏了"的典型：方向性关键帧若选择器不匹配，
 // 页面**照样能正常切换**，只是方向动画静默失效 —— 必须断言。
+//
+// 本轮（动效柔和化）新增三条判据，都是"肉眼看不出、但一改就退化"的：
+//   1. 出场曲线必须从静止起步（y1 === 0）—— ease-out 型曲线的起始斜率很大，
+//      视觉上就是"啪一下没了"，这正是此前生硬的根因。
+//   2. 位移必须足够大 —— 重叠期两层若不分开，溶解就退化成双重曝光。
+//   3. 页头必须独立成层 —— persist 只复用 DOM，不把元素摘出快照；
+//      不显式命名的话，root 位移会把页头渲染两份。
 await runPage(
   `${BASE}/`,
   async (cdp, label) => {
@@ -774,21 +781,40 @@ await runPage(
   const readTransition = (action) => `(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let snap = null;
+    let headCounts = [];
     const t0 = performance.now();
     const tick = () => {
       const dir = document.documentElement.getAttribute('data-astro-transition');
-      if (dir && !snap) {
-        const read = (sel) => {
-          const cs = getComputedStyle(document.documentElement, sel);
-          return { name: cs.animationName, dur: cs.animationDuration };
-        };
-        snap = { dir, old: read('::view-transition-old(root)'), next: read('::view-transition-new(root)') };
+      if (dir) {
+        headCounts.push(document.querySelectorAll('.site-header').length);
+        if (!snap) {
+          const read = (sel) => {
+            const cs = getComputedStyle(document.documentElement, sel);
+            return {
+              name: cs.animationName,
+              dur: cs.animationDuration,
+              ease: cs.animationTimingFunction,
+            };
+          };
+          const rootCs = getComputedStyle(document.documentElement);
+          snap = {
+            dir,
+            old: read('::view-transition-old(root)'),
+            next: read('::view-transition-new(root)'),
+            shift: rootCs.getPropertyValue('--vt-shift').trim(),
+            headOldAnim: getComputedStyle(
+              document.documentElement,
+              '::view-transition-old(site-header)',
+            ).animationName,
+          };
+        }
       }
       if (performance.now() - t0 < 1200) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
     ${action}
     await sleep(1400);
+    if (snap) snap.maxHeads = headCounts.length ? Math.max(...headCounts) : 0;
     return snap;
   })()`;
 
@@ -799,13 +825,44 @@ await runPage(
     !!fwd && fwd.old.name === 'vt-out-forward' && fwd.next.name === 'vt-in-forward',
     fwd ? `${fwd.old.name} / ${fwd.next.name}` : '(null)',
   );
-  // 旧层必须在时间上先让位：时长不等才不会两层同时半透明（重影）
+
+  // 判据 1：旧层在时间上先让位（时长不等才不会两层同时半透明）
   const outMs = fwd ? parseFloat(fwd.old.dur) : 0;
   const inMs = fwd ? parseFloat(fwd.next.dur) : 0;
   check(
     `${label}: 旧层让位快于新层进入`,
     outMs > 0 && inMs > 0 && outMs < inMs,
     `out ${outMs}s < in ${inMs}s`,
+  );
+
+  // 判据 2：出场曲线从静止起步。cubic-bezier(x1,y1,x2,y2) 的 y1 即起始斜率，
+  // 必须为 0 —— 否则就是 ease-out 型的"突然启动"，也就是"生硬"。
+  const outEase = fwd ? String(fwd.old.ease) : '';
+  const y1m = outEase.match(/cubic-bezier\(\s*[-\d.]+\s*,\s*([-\d.]+)/);
+  check(
+    `${label}: 出场从静止起步（不生硬）`,
+    !!y1m && parseFloat(y1m[1]) === 0,
+    outEase || '(none)',
+  );
+
+  // 判据 3：位移足够大，重叠期两层在空间上分开
+  const shift = fwd ? parseFloat(fwd.shift) : NaN;
+  check(
+    `${label}: 位移足以分开两层（防叠影）`,
+    Number.isFinite(shift) && shift >= 16,
+    `shift ${fwd ? fwd.shift : '(none)'}`,
+  );
+
+  // 判据 4：页头独立成层（不在 root 快照里），且过渡中只渲染一份
+  check(
+    `${label}: 页头独立成层（不在 root 快照里）`,
+    !!fwd && fwd.headOldAnim === 'none',
+    fwd ? `site-header old layer: ${fwd.headOldAnim}` : '(null)',
+  );
+  check(
+    `${label}: 过渡中页头不重复渲染`,
+    !!fwd && fwd.maxHeads === 1,
+    fwd ? `header 元素数 ${fwd.maxHeads}` : '(null)',
   );
 
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
@@ -816,6 +873,14 @@ await runPage(
     !!back && back.old.name === 'vt-out-back' && back.next.name === 'vt-in-back',
     back ? `${back.old.name} / ${back.next.name}` : '(null)',
   );
+  check(
+    `${label}: 后退同样从静止起步`,
+    !!back && (() => {
+      const m = String(back.old.ease).match(/cubic-bezier\(\s*[-\d.]+\s*,\s*([-\d.]+)/);
+      return !!m && parseFloat(m[1]) === 0;
+    })(),
+    back ? String(back.old.ease) : '(null)',
+  );
 
   // 页头是 transition:persist 的：导航后节点应被复用（搜索框内容与焦点得以保留）
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 500))`);
@@ -823,13 +888,19 @@ await runPage(
     cdp,
     `(async () => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      const h = document.querySelector('.site-header');
-      if (!h || !document.querySelector('.post-row a')) return { skip: true };
-      h.dataset.vtPersistCheck = 'kept';
-      document.querySelector('.post-row a').click();
-      await sleep(1400);
-      const h2 = document.querySelector('.site-header');
-      return { reused: !!h2 && h2.dataset.vtPersistCheck === 'kept' };
+      const first = document.querySelector('.site-header');
+      if (!first) return { reused: false, skip: true };
+      first.dataset.probe = 'kept';
+      const link = document.querySelector('.post-row a') || document.querySelector('a[href*="/posts/"]');
+      if (!link) return { reused: false, skip: true };
+      link.click();
+      await sleep(700);
+      const after = document.querySelector('.site-header');
+      return {
+        reused: !!after && after.dataset.probe === 'kept',
+        skip: false,
+        count: document.querySelectorAll('.site-header').length,
+      };
     })()`,
   );
   check(

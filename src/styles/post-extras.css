@@ -256,6 +256,11 @@
     opacity: 1;
     transform: none;
   }
+  /* 位移量归零：减弱动效的用户不该被"整页推动"。
+     实测本就接近 0（组动画被关掉），但这里显式钉死，不依赖副作用。 */
+  :root {
+    --vt-shift: 0px;
+  }
   ::view-transition-group(*) {
     animation: none !important;
   }

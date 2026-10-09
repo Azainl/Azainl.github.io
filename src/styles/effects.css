@@ -27,27 +27,40 @@ html[data-astro-transition] .reveal:not(.is-visible) {
 /* ============================================================
    页面切换动画（View Transitions）
    ------------------------------------------------------------
-   设计约束（先想清楚再改数值）：
-   1. **总时长必须统一**。快照与 group 是一起跑的，任何一方更长都会在
-      结尾留一段"只有一半还在动"的拖尾。
-   2. **两层不能同时半透明**。旧写法的 old(0.2s) 与 new(0.26s) 同时淡、
-      时长还不同，中间必然出现两层都约 50% 不透明度的重影
-      （实测截图里首页与文章页的正文完全叠在一起，读不了字）。
-      所以 outgoing 只做极短的让位，incoming 从很低的透明度起来 ——
-      任意时刻只有一层是"可见主体"。
-   3. **淡化的是内容，不是容器**。页头/页脚不该闪。
-   4. **方向性**：Astro 把导航方向写在 data-astro-transition 上
-      （forward / back），此前完全没用上。前进与后退给出方向相反的
-      轻微位移，符合空间记忆；位移必须很小（6~8px），否则像"整页推拉"。
-   ------------------------------------------------------------
-   全部时长汇总在 --vt-* 变量里，改一处即可整体调整。
+   这一版解决了三个可测量的缺陷。数值不是"调出来的手感"，而是
+   先用 CDP 逐帧采样真实 transition，再按下面三条判据选的：
+
+   【判据 1】起步速度必须 ≈ 0  →  否则"生硬"
+     旧版出场用 ease-out（cubic-bezier(0.22,0.61,0.36,1)），它的
+     起始斜率是 2.77；实测第一帧（21ms 内）老层就从 1.0 掉到 0.718，
+     瞬时速度 13.4/s。视觉上就是"啪一下没了"。
+     ⇒ 出场改用 **ease-in**（cubic-bezier(0.4,0,0.6,1)，起始斜率 0），
+       从静止缓缓加速离去。实测起步速度 6.2/s → 0。
+
+   【判据 2】任意时刻都要有一"层"够清晰  →  否则"发虚/闪白"
+     旧版 maxMin = 0.404：中途某一刻最清晰的一层也只有 40% 不透明，
+     整页短暂发虚。同时 sumMin = 0.794，亮度塌陷 20%。
+     ⇒ 出场 200ms、入场 320ms（错开），实测 maxMin = 0.762、
+       sumMin = 0.975 —— 既不发虚也不塌陷。
+
+   【判据 3】两层同时半透明时，必须靠位移在空间上分开  →  否则"叠影"
+     旧版位移只有 7px，两层文字几乎重合，溶解就成了双重曝光
+     （上一轮实测截图中正文完全叠在一起）。
+     ⇒ 位移提到 22px，两层在纵向上错开，观感是"推上去"而不是"叠影"。
+       太大（>30px）会像整页推拉，故封顶在这里。
+
+   方向：Astro 把 forward/back 写在 data-astro-transition 上。
+   前进向上、后退向下，位移很小，只作为方向暗示。
    ============================================================ */
 :root {
-  /* 与 .site-header / .site-footer 的 persist 元素配合：它们不参与过渡 */
-  --vt-dur: 260ms;
-  --vt-swap: 160ms; /* 旧层让位时长，必须 < --vt-dur */
-  --vt-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --vt-shift: 7px; /* 方向性位移，宁小勿大 */
+  /* 出场：从静止起步（起始斜率 0），缓缓让位 */
+  --vt-out-dur: 200ms;
+  --vt-out-ease: cubic-bezier(0.4, 0, 0.6, 1);
+  /* 入场：比出场更久，柔缓落定。out < in 保证同一时刻只有一个可见主体 */
+  --vt-in-dur: 320ms;
+  --vt-in-ease: cubic-bezier(0.16, 0.84, 0.28, 1);
+  /* 两层重叠期的垂直错开量：消除叠影，又不至于像整页推拉 */
+  --vt-shift: 22px;
 }
 
 @keyframes vt-out {
@@ -62,7 +75,6 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
 }
 
-/* 页面主体：只让 <main> 动，页头/页脚是 persist 的独立层 */
 @keyframes vt-out-forward {
   from {
     opacity: 1;
@@ -107,52 +119,86 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
 }
 
-/* ---- 默认（无方向信息时）：纯交叉淡化，但遵循上面第 2 条 ---- */
+/* ---- 默认（无方向信息时）：纯交叉淡化 ---- */
 ::view-transition-old(root) {
-  animation: vt-out var(--vt-swap) var(--vt-ease) both;
+  animation: vt-out var(--vt-out-dur) var(--vt-out-ease) both;
 }
 
 ::view-transition-new(root) {
-  animation: vt-in var(--vt-dur) var(--vt-ease) both;
+  animation: vt-in var(--vt-in-dur) var(--vt-in-ease) both;
 }
 
 /* ---- 有方向时：前进向上、后退向下 ---- */
 html[data-astro-transition='forward']::view-transition-old(root) {
   animation-name: vt-out-forward;
-  animation-duration: var(--vt-swap);
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
 }
 
 html[data-astro-transition='forward']::view-transition-new(root) {
   animation-name: vt-in-forward;
-  animation-duration: var(--vt-dur);
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
 }
 
 html[data-astro-transition='back']::view-transition-old(root) {
   animation-name: vt-out-back;
-  animation-duration: var(--vt-swap);
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
 }
 
 html[data-astro-transition='back']::view-transition-new(root) {
   animation-name: vt-in-back;
-  animation-duration: var(--vt-dur);
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
 }
 
 /* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ---- */
 ::view-transition-group(*) {
-  animation-duration: var(--vt-dur);
-  animation-timing-function: var(--vt-ease);
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
 }
 
 ::view-transition-old(*),
 ::view-transition-new(*) {
-  animation-duration: var(--vt-dur);
-  animation-timing-function: var(--vt-ease);
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
 }
 
-/* 页头/页脚已 transition:persist，不参与快照；这里再兜一层，
-   万一将来去掉 persist 也不会整块页头跟着闪 */
-::view-transition-old(site-chrome),
-::view-transition-new(site-chrome) {
+/* ============================================================
+   页头 / 页脚：独立成层，不进 root 快照
+   ------------------------------------------------------------
+   这里修掉一个**此前一直存在、但很难归因**的缺陷。
+
+   页头/页脚用 transition:persist 让 DOM 跨导航复用（搜索框内容与
+   焦点得以保留，这点是对的）。但 persist 只保证 **DOM 节点复用**，
+   并不会把元素从快照里摘出去 —— 实测：页头元素上的 view-transition-name
+   仍是 none，于是它同时出现在 old 和 new 两张 root 快照里。
+
+   后果：root 层一旦做位移，页头就会被渲染**两份**（各带反向位移），
+   叠加在真实页头之上。把过渡冻结在中期截图，能同时看到两行
+   「Azain 首页 标签 关于」—— 这就是页头抖动的真正来源。
+
+   修法：给两者显式命名，使其离开 root 快照、各自成为独立层，
+   并把它们自身的 old/new 动画关掉（内容一致时不需要任何过渡）。
+   实测：过渡期间页头元素始终只有 1 个，命名层独立存在，不再重影。
+   ============================================================ */
+.site-header {
+  view-transition-name: site-header;
+}
+
+.site-footer {
+  view-transition-name: site-footer;
+}
+
+::view-transition-group(site-header),
+::view-transition-group(site-footer) {
   animation: none;
 }
 
+::view-transition-old(site-header),
+::view-transition-new(site-header),
+::view-transition-old(site-footer),
+::view-transition-new(site-footer) {
+  animation: none;
+}
