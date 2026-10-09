@@ -1163,6 +1163,90 @@ await runPage(
   '文章前后导航动画',
 );
 
+// ---- 页头不透明：搜索框不能被页面文字"盖住" ----
+// 起因：页头曾写成「92% 半透明 + backdrop-filter 毛玻璃」，但构建器按
+// 「同一属性的重复声明」只保留了后写的 -webkit-backdrop-filter，而 Chrome
+// 不认这个前缀别名（CSS.supports 为 false）—— 于是页头半透明且没有任何模糊。
+// 后果是滚动时正文直接透过页头，压在搜索框上，看起来像"搜索框颜色被盖住"。
+//
+// 这类缺陷**不会让任何功能失败**，只是看着脏，所以必须用断言钉住：
+// 页头底色必须完全不透明（alpha = 1 且不是 color(srgb …/ 0.92) 这种形式）。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    const info = await evaluate(
+      cdp,
+      `(() => {
+        const h = document.querySelector('.site-header');
+        if (!h) return { error: 'no header' };
+        const bg = getComputedStyle(h).backgroundColor;
+        const bf = getComputedStyle(h).backdropFilter;
+        // 把 rgb()/rgba()/color(srgb ...) 里的 alpha 抠出来
+        let alpha = 1;
+        const rgba = bg.match(/rgba?\\([^)]*?([\\d.]+)\\)\\s*$/);
+        const slash = bg.match(/\\/\\s*([\\d.]+)\\s*\\)/);
+        if (slash) alpha = parseFloat(slash[1]);
+        else if (/^rgba/.test(bg) && rgba) alpha = parseFloat(rgba[1]);
+        return { bg, alpha, bf };
+      })()`,
+    );
+    check(
+      `${label}: 页头底色不透明（搜索框不被正文透过）`,
+      !!info && !info.error && typeof info.alpha === 'number' && info.alpha >= 1,
+      info && !info.error ? `background=${info.bg} alpha=${info.alpha}` : '(null)',
+    );
+    // 顺带钉住"不要依赖 backdrop-filter"：它在这个构建里拿不到标准属性
+    check(
+      `${label}: 页头不依赖 backdrop-filter 维持可读性`,
+      !!info && !info.error && (info.bf === 'none' || info.alpha >= 1),
+      info && !info.error ? `backdropFilter=${info.bf} alpha=${info.alpha}` : '(null)',
+    );
+  },
+  '页头可读性',
+);
+
+// ---- 首页列表：标签在「上方文字」与「下方分割线」之间居中 ----
+// 起因：标签是 <a> 的兄弟节点，上间距 = <a> 的 24px 下内边距 + 标签 8px 外边距
+// = 32px；而下间距只由标签自己的 margin-bottom 决定，原为 0。
+// 实测标签底 535.4 与分割线 535.4 完全重合，视觉上"坠"在下边。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    const rows = await evaluate(
+      cdp,
+      `(() => {
+        const all = [...document.querySelectorAll('.post-row')];
+        return all.map((row, i) => {
+          const tl = row.querySelector('.tag-list');
+          const p = row.querySelector('a p');
+          if (!tl || !p) return null;
+          const next = all[i + 1];
+          const rt = tl.getBoundingClientRect();
+          const rp = p.getBoundingClientRect();
+          const divider = next ? next.getBoundingClientRect().top : row.getBoundingClientRect().bottom;
+          return {
+            above: +(rt.top - rp.bottom).toFixed(1),
+            below: +(divider - rt.bottom).toFixed(1),
+          };
+        }).filter(Boolean);
+      })()`,
+    );
+    // 只考察"同年份组内"的行：跨年份组时下方还有年份标题，间距天然更大
+    const within = rows.filter(
+      (r) => Math.abs(r.below - r.above) <= 8,
+    );
+    const off = rows.filter((r) => r.below < 8);
+    check(
+      `${label}: 首页标签在文字与分割线之间居中`,
+      rows.length > 0 && off.length === 0,
+      rows.length
+        ? `${within.length}/${rows.length} 行上下对称（如 above=${rows[0].above} below=${rows[0].below}）；贴线行数=${off.length}`
+        : '(no rows)',
+    );
+  },
+  '首页列表间距',
+);
+
 console.log(results.join('\n'));
 console.log(
   `\n${failed === 0 ? 'PASS' : 'FAIL'}  ${results.length - failed} passed, ${failed} failed, ${results.length} total`,
