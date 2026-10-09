@@ -5,7 +5,7 @@ import { url } from '../utils/url';
 const year = new Date().getFullYear();
 ---
 
-<footer class="site-footer">
+<footer class="site-footer" transition:persist="site-footer">
   <div class="footer-inner">
     <p class="footer-copy">
       © {year} {SITE.name} · 用 Astro 构建

@@ -26,36 +26,133 @@ html[data-astro-transition] .reveal:not(.is-visible) {
 
 /* ============================================================
    页面切换动画（View Transitions）
+   ------------------------------------------------------------
+   设计约束（先想清楚再改数值）：
+   1. **总时长必须统一**。快照与 group 是一起跑的，任何一方更长都会在
+      结尾留一段"只有一半还在动"的拖尾。
+   2. **两层不能同时半透明**。旧写法的 old(0.2s) 与 new(0.26s) 同时淡、
+      时长还不同，中间必然出现两层都约 50% 不透明度的重影
+      （实测截图里首页与文章页的正文完全叠在一起，读不了字）。
+      所以 outgoing 只做极短的让位，incoming 从很低的透明度起来 ——
+      任意时刻只有一层是"可见主体"。
+   3. **淡化的是内容，不是容器**。页头/页脚不该闪。
+   4. **方向性**：Astro 把导航方向写在 data-astro-transition 上
+      （forward / back），此前完全没用上。前进与后退给出方向相反的
+      轻微位移，符合空间记忆；位移必须很小（6~8px），否则像"整页推拉"。
+   ------------------------------------------------------------
+   全部时长汇总在 --vt-* 变量里，改一处即可整体调整。
    ============================================================ */
-@keyframes vt-page-out {
+:root {
+  /* 与 .site-header / .site-footer 的 persist 元素配合：它们不参与过渡 */
+  --vt-dur: 260ms;
+  --vt-swap: 160ms; /* 旧层让位时长，必须 < --vt-dur */
+  --vt-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --vt-shift: 7px; /* 方向性位移，宁小勿大 */
+}
+
+@keyframes vt-out {
   to {
     opacity: 0;
   }
 }
 
-@keyframes vt-page-in {
+@keyframes vt-in {
   from {
     opacity: 0;
   }
 }
 
+/* 页面主体：只让 <main> 动，页头/页脚是 persist 的独立层 */
+@keyframes vt-out-forward {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--vt-shift) * -1));
+  }
+}
+
+@keyframes vt-in-forward {
+  from {
+    opacity: 0;
+    transform: translateY(var(--vt-shift));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes vt-out-back {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--vt-shift));
+  }
+}
+
+@keyframes vt-in-back {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--vt-shift) * -1));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- 默认（无方向信息时）：纯交叉淡化，但遵循上面第 2 条 ---- */
 ::view-transition-old(root) {
-  animation: vt-page-out 0.2s ease both;
+  animation: vt-out var(--vt-swap) var(--vt-ease) both;
 }
 
 ::view-transition-new(root) {
-  animation: vt-page-in 0.26s ease both;
+  animation: vt-in var(--vt-dur) var(--vt-ease) both;
 }
 
-/* 共享元素（文章标题）的飞行动画：更柔和、更从容 */
+/* ---- 有方向时：前进向上、后退向下 ---- */
+html[data-astro-transition='forward']::view-transition-old(root) {
+  animation-name: vt-out-forward;
+  animation-duration: var(--vt-swap);
+}
+
+html[data-astro-transition='forward']::view-transition-new(root) {
+  animation-name: vt-in-forward;
+  animation-duration: var(--vt-dur);
+}
+
+html[data-astro-transition='back']::view-transition-old(root) {
+  animation-name: vt-out-back;
+  animation-duration: var(--vt-swap);
+}
+
+html[data-astro-transition='back']::view-transition-new(root) {
+  animation-name: vt-in-back;
+  animation-duration: var(--vt-dur);
+}
+
+/* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ---- */
 ::view-transition-group(*) {
-  animation-duration: 0.32s;
-  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-duration: var(--vt-dur);
+  animation-timing-function: var(--vt-ease);
 }
 
 ::view-transition-old(*),
 ::view-transition-new(*) {
-  animation-duration: 0.32s;
-  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-duration: var(--vt-dur);
+  animation-timing-function: var(--vt-ease);
+}
+
+/* 页头/页脚已 transition:persist，不参与快照；这里再兜一层，
+   万一将来去掉 persist 也不会整块页头跟着闪 */
+::view-transition-old(site-chrome),
+::view-transition-new(site-chrome) {
+  animation: none;
 }
 

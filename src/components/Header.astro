@@ -15,7 +15,10 @@ const links = [
 ];
 ---
 
-<header class="site-header">
+{/* transition:persist 必须写在原生元素上，写在 <Header /> 组件上会被静默忽略。
+    persist 后页头不参与页面切换快照：整块页头（含搜索框）不再跟着闪，
+    搜索框里已输入的内容与焦点也能跨页面保留。 */}
+<header class="site-header" transition:persist="site-header">
   <div class="header-inner">
     <a class="wordmark" href={url('/')} aria-label={`${SITE.name} 首页`}>
       Az<span>ain</span>
@@ -356,11 +359,16 @@ const links = [
     });
   }
 
+  // 页头加了 transition:persist：DOM 不再随导航重建，所以不必每次都重新绑定，
+  // 但**必须**在每次导航后重新同步"当前页高亮"与主题按钮的无障碍标签
+  // （服务端渲染出来的 aria-current 属于上一个页面）。
   onPageLoad(() => {
     initHeader();
     initTheme();
     updateNav();
     bindOutsideClick();
     bindSearchShortcut();
+    // 上次导航若停在搜索弹层上，切页后要收起来，免得残留在新页面上
+    document.getElementById('search-popover')?.classList.remove('open');
   });
 </script>

@@ -764,6 +764,83 @@ if (searchJsonRes.ok) {
   );
 }
 
+// ---- 页面切换动画（View Transitions）----
+// 这几项是"改了样式但看不出坏了"的典型：方向性关键帧若选择器不匹配，
+// 页面**照样能正常切换**，只是方向动画静默失效 —— 必须断言。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+  // 在过渡进行中读 ::view-transition-*(root) 的 computed 样式
+  const readTransition = (action) => `(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let snap = null;
+    const t0 = performance.now();
+    const tick = () => {
+      const dir = document.documentElement.getAttribute('data-astro-transition');
+      if (dir && !snap) {
+        const read = (sel) => {
+          const cs = getComputedStyle(document.documentElement, sel);
+          return { name: cs.animationName, dur: cs.animationDuration };
+        };
+        snap = { dir, old: read('::view-transition-old(root)'), next: read('::view-transition-new(root)') };
+      }
+      if (performance.now() - t0 < 1200) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    ${action}
+    await sleep(1400);
+    return snap;
+  })()`;
+
+  const fwd = await evaluate(cdp, readTransition(`document.querySelector('.post-row a').click();`));
+  check(`${label}: 前进过渡有方向信息`, fwd && fwd.dir === 'forward', fwd ? fwd.dir : '(null)');
+  check(
+    `${label}: 前进用 forward 关键帧`,
+    !!fwd && fwd.old.name === 'vt-out-forward' && fwd.next.name === 'vt-in-forward',
+    fwd ? `${fwd.old.name} / ${fwd.next.name}` : '(null)',
+  );
+  // 旧层必须在时间上先让位：时长不等才不会两层同时半透明（重影）
+  const outMs = fwd ? parseFloat(fwd.old.dur) : 0;
+  const inMs = fwd ? parseFloat(fwd.next.dur) : 0;
+  check(
+    `${label}: 旧层让位快于新层进入`,
+    outMs > 0 && inMs > 0 && outMs < inMs,
+    `out ${outMs}s < in ${inMs}s`,
+  );
+
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
+  const back = await evaluate(cdp, readTransition(`history.back();`));
+  check(`${label}: 后退过渡有方向信息`, back && back.dir === 'back', back ? back.dir : '(null)');
+  check(
+    `${label}: 后退用 back 关键帧`,
+    !!back && back.old.name === 'vt-out-back' && back.next.name === 'vt-in-back',
+    back ? `${back.old.name} / ${back.next.name}` : '(null)',
+  );
+
+  // 页头是 transition:persist 的：导航后节点应被复用（搜索框内容与焦点得以保留）
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 500))`);
+  const persist = await evaluate(
+    cdp,
+    `(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const h = document.querySelector('.site-header');
+      if (!h || !document.querySelector('.post-row a')) return { skip: true };
+      h.dataset.vtPersistCheck = 'kept';
+      document.querySelector('.post-row a').click();
+      await sleep(1400);
+      const h2 = document.querySelector('.site-header');
+      return { reused: !!h2 && h2.dataset.vtPersistCheck === 'kept' };
+    })()`,
+  );
+  check(
+    `${label}: 页头跨导航复用（persist）`,
+    !!(persist && persist.reused),
+    persist && persist.skip ? '(跳过)' : persist ? '节点已复用' : '(null)',
+  );
+  },
+  '页面切换动画',
+);
+
 console.log(results.join('\n'));
 console.log(
   `\n${failed === 0 ? 'PASS' : 'FAIL'}  ${results.length - failed} passed, ${failed} failed, ${results.length} total`,

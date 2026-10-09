@@ -114,7 +114,12 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
   </head>
   <body data-path={Astro.url.pathname} data-notfound={notFound ? '' : undefined}>
     <a class="skip-link" href="#main">跳到主要内容</a>
+    {/* 页头/页脚的 persist 写在它们各自的根元素上（见 Header.astro / Footer.astro）：
+        transition:persist 只对**原生元素**生效，写在组件上会被静默忽略。 */}
     <Header />
+    {/* main 不加 transition:name：加了会生成独立的 page-content 层，
+        它同样是一对新旧快照、同样会交叉淡入 —— 等于把重影从 root 挪到了这里。
+        真正需要的是"页头/页脚不闪"，那由它们自己的 persist 解决。 */}
     <main id="main">
       <slot />
     </main>
