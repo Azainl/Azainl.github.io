@@ -27,30 +27,46 @@ html[data-astro-transition] .reveal:not(.is-visible) {
 /* ============================================================
    页面切换动画（View Transitions）
    ------------------------------------------------------------
-   这一版解决了三个可测量的缺陷。数值不是"调出来的手感"，而是
-   先用 CDP 逐帧采样真实 transition，再按下面三条判据选的：
+   数值不是"调出来的手感"，而是先用 CDP 逐帧采样真实 transition，
+   再按下面判据选的：
 
    【判据 1】起步速度必须 ≈ 0  →  否则"生硬"
-     旧版出场用 ease-out（cubic-bezier(0.22,0.61,0.36,1)），它的
-     起始斜率是 2.77；实测第一帧（21ms 内）老层就从 1.0 掉到 0.718，
-     瞬时速度 13.4/s。视觉上就是"啪一下没了"。
-     ⇒ 出场改用 **ease-in**（cubic-bezier(0.4,0,0.6,1)，起始斜率 0），
-       从静止缓缓加速离去。实测起步速度 6.2/s → 0。
+     旧版出场用 ease-out（cubic-bezier(0.22,0.61,0.36,1)），起始斜率
+     2.77；实测第一帧老层就从 1.0 掉到 0.718，瞬时速度 13.4/s，
+     视觉上就是"啪一下没了"。
+     ⇒ 出场用 **ease-in**（起斜率 0），从静止缓缓加速离去。
 
-   【判据 2】任意时刻都要有一"层"够清晰  →  否则"发虚/闪白"
-     旧版 maxMin = 0.404：中途某一刻最清晰的一层也只有 40% 不透明，
-     整页短暂发虚。同时 sumMin = 0.794，亮度塌陷 20%。
-     ⇒ 出场 200ms、入场 320ms（错开），实测 maxMin = 0.762、
-       sumMin = 0.975 —— 既不发虚也不塌陷。
+   【判据 2】任意时刻都要有一"层"够清晰  →  否则"发虚"
+     旧版中途最清晰的一层只有 40% 不透明。
+     ⇒ 出场 200ms、入场 320ms（错开），同一时刻只有一个可见主体。
 
-   【判据 3】两层同时半透明时，必须靠位移在空间上分开  →  否则"叠影"
-     旧版位移只有 7px，两层文字几乎重合，溶解就成了双重曝光
-     （上一轮实测截图中正文完全叠在一起）。
-     ⇒ 位移提到 22px，两层在纵向上错开，观感是"推上去"而不是"叠影"。
-       太大（>30px）会像整页推拉，故封顶在这里。
+   【判据 3】两层同时半透明时，靠位移在空间上分开  →  否则"叠影"
+     ⇒ 位移 22px。太小两层文字重合（双重曝光），太大像整页推拉。
 
-   方向：Astro 把 forward/back 写在 data-astro-transition 上。
-   前进向上、后退向下，位移很小，只作为方向暗示。
+   —— 本轮新增：**轴向** 与 **字体跟随** ——
+
+   【判据 4】切换方向要跟操作一致，且"哪来哪去"
+     站内有三类横向翻阅：翻页（← 上一页 / 下一页 →）、文章底部的
+     （更新的文章 / 更早的文章）、页码。它们此前套用的是纵向（上下推）
+     动画 —— 点左右两边的控件，画面却朝上下动，方向感是错的。
+
+     规则：**新内容从被点击控件所在的那一侧进来**。
+       点右侧（下一页 →、更早的文章）→ 内容向左走，新页自右入。
+       点左侧（← 上一页、更新的文章）→ 内容向右走，新页自左入。
+
+     实现上不写第二套动画：后退键帧是前进键帧的**逐项取负**，
+     所以"哪来哪去"是构造性成立的，而不是靠两处数值手动对齐
+     （手动对齐的写法改单边数值时就会悄悄不对称）。
+     轴与方向由 src/scripts/vtAxis.ts 依据被点击元素写进
+     <html data-vt-axis="x" data-vt-back>。
+
+   【判据 5】具名元素（标题文字）必须与页面**同向、同速、同时长**移动
+     列表标题与文章标题共用一个 view-transition-name，会被**抽离**
+     root 快照成为独立层。实测这一层拿到的是 Astro 内建的
+     astroFadeOut/astroFadeIn（**纯淡化、完全不位移**）—— 于是
+     页面在动、标题文字不动，二者脱节。这正是"字体移动方向与页面
+     切换不一致"的根源。
+     ⇒ 具名层的 old/new 也跑同一组键帧，时长/缓动与 root 逐项一致。
    ============================================================ */
 :root {
   /* 出场：从静止起步（起始斜率 0），缓缓让位 */
@@ -59,22 +75,24 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   /* 入场：比出场更久，柔缓落定。out < in 保证同一时刻只有一个可见主体 */
   --vt-in-dur: 320ms;
   --vt-in-ease: cubic-bezier(0.16, 0.84, 0.28, 1);
-  /* 两层重叠期的垂直错开量：消除叠影，又不至于像整页推拉 */
+  /* 两层重叠期的错开量：消除叠影，又不至于像整页推拉 */
   --vt-shift: 22px;
+
+  /* 位移向量，始终按"前进"取向；后退 = 逐项取负。
+     默认纵向：列表 → 文章是上下翻阅。
+     --vt-ax / --vt-ay 是唯一的方向事实来源，键帧只引用它们，
+     因此"同向同速"由构造保证，不靠多处数值对齐。 */
+  --vt-ax: 0px;
+  --vt-ay: var(--vt-shift);
 }
 
-@keyframes vt-out {
-  to {
-    opacity: 0;
-  }
+/* 左右翻阅：位移转到横轴（由 vtAxis.ts 写在 <html> 上） */
+html[data-vt-axis='x'] {
+  --vt-ax: var(--vt-shift);
+  --vt-ay: 0px;
 }
 
-@keyframes vt-in {
-  from {
-    opacity: 0;
-  }
-}
-
+/* ---- 键帧：forward 为基准，back 是它的精确镜像 ---- */
 @keyframes vt-out-forward {
   from {
     opacity: 1;
@@ -82,14 +100,14 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
   to {
     opacity: 0;
-    transform: translateY(calc(var(--vt-shift) * -1));
+    transform: translate(calc(var(--vt-ax) * -1), calc(var(--vt-ay) * -1));
   }
 }
 
 @keyframes vt-in-forward {
   from {
     opacity: 0;
-    transform: translateY(var(--vt-shift));
+    transform: translate(var(--vt-ax), var(--vt-ay));
   }
   to {
     opacity: 1;
@@ -97,6 +115,7 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
 }
 
+/* 后退 = 前进取负：out 反向离开，in 从反侧回来 —— "哪来哪去" */
 @keyframes vt-out-back {
   from {
     opacity: 1;
@@ -104,14 +123,14 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
   to {
     opacity: 0;
-    transform: translateY(var(--vt-shift));
+    transform: translate(var(--vt-ax), var(--vt-ay));
   }
 }
 
 @keyframes vt-in-back {
   from {
     opacity: 0;
-    transform: translateY(calc(var(--vt-shift) * -1));
+    transform: translate(calc(var(--vt-ax) * -1), calc(var(--vt-ay) * -1));
   }
   to {
     opacity: 1;
@@ -119,16 +138,16 @@ html[data-astro-transition] .reveal:not(.is-visible) {
   }
 }
 
-/* ---- 默认（无方向信息时）：纯交叉淡化 ---- */
+/* ---- 默认（无方向信息时）：与前进同形 ---- */
 ::view-transition-old(root) {
-  animation: vt-out var(--vt-out-dur) var(--vt-out-ease) both;
+  animation: vt-out-forward var(--vt-out-dur) var(--vt-out-ease) both;
 }
 
 ::view-transition-new(root) {
-  animation: vt-in var(--vt-in-dur) var(--vt-in-ease) both;
+  animation: vt-in-forward var(--vt-in-dur) var(--vt-in-ease) both;
 }
 
-/* ---- 有方向时：前进向上、后退向下 ---- */
+/* ---- root：前进向上/向左，后退向下/向右（轴由 --vt-a* 决定） ---- */
 html[data-astro-transition='forward']::view-transition-old(root) {
   animation-name: vt-out-forward;
   animation-duration: var(--vt-out-dur);
@@ -153,14 +172,63 @@ html[data-astro-transition='back']::view-transition-new(root) {
   animation-timing-function: var(--vt-in-ease);
 }
 
-/* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ---- */
-::view-transition-group(*) {
+/* ---- 具名元素（标题文字）：逐项跟随 root ---- */
+html[data-astro-transition='forward']::view-transition-old(*) {
+  animation-name: vt-out-forward;
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
+}
+
+html[data-astro-transition='forward']::view-transition-new(*) {
+  animation-name: vt-in-forward;
   animation-duration: var(--vt-in-dur);
   animation-timing-function: var(--vt-in-ease);
 }
 
-::view-transition-old(*),
-::view-transition-new(*) {
+html[data-astro-transition='back']::view-transition-old(*) {
+  animation-name: vt-out-back;
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
+}
+
+html[data-astro-transition='back']::view-transition-new(*) {
+  animation-name: vt-in-back;
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
+}
+
+/* 翻页语义优先于 history 方向：
+   点「← 上一页」在浏览器历史里是一次**前进**导航，Astro 会标成
+   forward；但从翻页语义上它必须与「下一页」互为镜像。所以
+   data-vt-back 一旦出现就覆盖上面的方向判定。
+   注意：这三段必须放在所有 data-astro-transition 规则**之后** ——
+   二者优先级相同，靠源码顺序决定胜负。 */
+html[data-vt-back]::view-transition-old(root) {
+  animation-name: vt-out-back;
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
+}
+
+html[data-vt-back]::view-transition-new(root) {
+  animation-name: vt-in-back;
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
+}
+
+html[data-vt-back]::view-transition-old(*) {
+  animation-name: vt-out-back;
+  animation-duration: var(--vt-out-dur);
+  animation-timing-function: var(--vt-out-ease);
+}
+
+html[data-vt-back]::view-transition-new(*) {
+  animation-name: vt-in-back;
+  animation-duration: var(--vt-in-dur);
+  animation-timing-function: var(--vt-in-ease);
+}
+
+/* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ---- */
+::view-transition-group(*) {
   animation-duration: var(--vt-in-dur);
   animation-timing-function: var(--vt-in-ease);
 }
@@ -168,20 +236,22 @@ html[data-astro-transition='back']::view-transition-new(root) {
 /* ============================================================
    页头 / 页脚：独立成层，不进 root 快照
    ------------------------------------------------------------
-   这里修掉一个**此前一直存在、但很难归因**的缺陷。
+   修掉一个此前一直存在、但很难归因的缺陷。
 
    页头/页脚用 transition:persist 让 DOM 跨导航复用（搜索框内容与
    焦点得以保留，这点是对的）。但 persist 只保证 **DOM 节点复用**，
-   并不会把元素从快照里摘出去 —— 实测：页头元素上的 view-transition-name
-   仍是 none，于是它同时出现在 old 和 new 两张 root 快照里。
-
-   后果：root 层一旦做位移，页头就会被渲染**两份**（各带反向位移），
-   叠加在真实页头之上。把过渡冻结在中期截图，能同时看到两行
+   并不会把元素从快照里摘出去 —— 实测：页头元素上的
+   view-transition-name 仍是 none，于是它同时出现在 old 和 new
+   两张 root 快照里。后果：root 层一旦做位移，页头就被渲染两份
+   （各带反向位移）。把过渡冻结在中期截图，能同时看到两行
    「Azain 首页 标签 关于」—— 这就是页头抖动的真正来源。
 
    修法：给两者显式命名，使其离开 root 快照、各自成为独立层，
    并把它们自身的 old/new 动画关掉（内容一致时不需要任何过渡）。
-   实测：过渡期间页头元素始终只有 1 个，命名层独立存在，不再重影。
+
+   选择器里的 :root 是有意加的：上面的 ::view-transition-old(*)
+   通配规则与这里优先级相同，全靠源码顺序太脆；加一个伪类
+   （+0,1,0）后无论如何都压得住，页头不会被拖去做位移。
    ============================================================ */
 .site-header {
   view-transition-name: site-header;
@@ -191,14 +261,20 @@ html[data-astro-transition='back']::view-transition-new(root) {
   view-transition-name: site-footer;
 }
 
-::view-transition-group(site-header),
-::view-transition-group(site-footer) {
+html:root::view-transition-group(site-header),
+html:root::view-transition-group(site-footer),
+html:root[data-astro-transition]::view-transition-group(site-header),
+html:root[data-astro-transition]::view-transition-group(site-footer) {
   animation: none;
 }
 
-::view-transition-old(site-header),
-::view-transition-new(site-header),
-::view-transition-old(site-footer),
-::view-transition-new(site-footer) {
+html:root::view-transition-old(site-header),
+html:root::view-transition-new(site-header),
+html:root::view-transition-old(site-footer),
+html:root::view-transition-new(site-footer),
+html:root[data-astro-transition]::view-transition-old(site-header),
+html:root[data-astro-transition]::view-transition-new(site-header),
+html:root[data-astro-transition]::view-transition-old(site-footer),
+html:root[data-astro-transition]::view-transition-new(site-footer) {
   animation: none;
 }

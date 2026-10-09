@@ -164,7 +164,12 @@ const jsonLd = {
       <nav class="post-nav" aria-label="上一篇和下一篇">
         {
           newer && (
-            <a class="post-nav-link newer" href={url(`/posts/${newer.id}/`)}>
+            <a
+              class="post-nav-link newer"
+              data-vt-axis="x"
+              data-vt-dir="prev"
+              href={url(`/posts/${newer.id}/`)}
+            >
               <span class="post-nav-dir">更新的文章</span>
               <span class="post-nav-title">{newer.data.title}</span>
             </a>
@@ -172,7 +177,12 @@ const jsonLd = {
         }
         {
           older && (
-            <a class="post-nav-link older" href={url(`/posts/${older.id}/`)}>
+            <a
+              class="post-nav-link older"
+              data-vt-axis="x"
+              data-vt-dir="next"
+              href={url(`/posts/${older.id}/`)}
+            >
               <span class="post-nav-dir">更早的文章</span>
               <span class="post-nav-title">{older.data.title}</span>
             </a>

@@ -131,6 +131,11 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
       import '../scripts/backButton';
     </script>
     <script>
+      // 轴向/方向判定：必须在过渡开始前把 data-vt-axis 写到 <html> 上，
+      // 供 effects.css 选择方向键帧（左右翻阅 vs 上下翻阅）
+      import '../scripts/vtAxis';
+    </script>
+    <script>
       // 客户端路由兜底：导航后页面内容与 URL 不一致时强制整页刷新，
       // 防止个别浏览器（或返回键场景）下路由交换失败导致页面空白。
       function ensurePageMatchesUrl() {

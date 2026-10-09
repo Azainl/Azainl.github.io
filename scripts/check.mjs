@@ -783,9 +783,32 @@ await runPage(
     let snap = null;
     let headCounts = [];
     const t0 = performance.now();
+    // 共享元素（列表标题 → 文章标题）在导航前先取名字；导航后该元素
+    // 属于新文档，名字要靠这里记住才能读到伪元素。
+    const titleEl0 = document.querySelector('.post-row-title');
+    const tn = titleEl0 ? getComputedStyle(titleEl0).viewTransitionName : '';
+    const xy = (tf) => {
+      if (!tf || tf === 'none') return [0, 0];
+      const m = tf.match(/matrix\\(([^)]+)\\)/);
+      if (!m) return [0, 0];
+      const p = m[1].split(',').map(Number);
+      return p.length >= 6 ? [p[4], p[5]] : [0, 0];
+    };
+    // 逐帧扫描峰值位移：首帧动画尚未应用，读数恒为 0,0
+    const peak = { rootOld: [0, 0], rootNew: [0, 0], titleOld: [0, 0], titleNew: [0, 0] };
+    const keep = (slot, v) => {
+      if (Math.abs(v[0]) > Math.abs(peak[slot][0])) peak[slot][0] = v[0];
+      if (Math.abs(v[1]) > Math.abs(peak[slot][1])) peak[slot][1] = v[1];
+    };
     const tick = () => {
       const dir = document.documentElement.getAttribute('data-astro-transition');
       if (dir) {
+        keep('rootOld', xy(getComputedStyle(document.documentElement, '::view-transition-old(root)').transform));
+        keep('rootNew', xy(getComputedStyle(document.documentElement, '::view-transition-new(root)').transform));
+        if (tn) {
+          keep('titleOld', xy(getComputedStyle(document.documentElement, '::view-transition-old(' + tn + ')').transform));
+          keep('titleNew', xy(getComputedStyle(document.documentElement, '::view-transition-new(' + tn + ')').transform));
+        }
         headCounts.push(document.querySelectorAll('.site-header').length);
         if (!snap) {
           const read = (sel) => {
@@ -806,6 +829,10 @@ await runPage(
               document.documentElement,
               '::view-transition-old(site-header)',
             ).animationName,
+            titleName: tn,
+            titleOldAnim: tn
+              ? getComputedStyle(document.documentElement, '::view-transition-old(' + tn + ')').animationName
+              : null,
           };
         }
       }
@@ -814,7 +841,13 @@ await runPage(
     requestAnimationFrame(tick);
     ${action}
     await sleep(1400);
-    if (snap) snap.maxHeads = headCounts.length ? Math.max(...headCounts) : 0;
+    if (snap) {
+      snap.maxHeads = headCounts.length ? Math.max(...headCounts) : 0;
+      snap.rootOldPeak = peak.rootOld;
+      snap.rootNewPeak = peak.rootNew;
+      snap.titleOldPeak = peak.titleOld;
+      snap.titleNewPeak = peak.titleNew;
+    }
     return snap;
   })()`;
 
@@ -865,6 +898,28 @@ await runPage(
     fwd ? `header 元素数 ${fwd.maxHeads}` : '(null)',
   );
 
+  // 判据 5：具名标题层（列表标题 → 文章标题）必须与页面同向同量移动。
+  // 这一层会被**抽离** root 快照，默认拿到 Astro 内建的
+  // astroFadeOut/astroFadeIn —— 纯淡化、零位移，于是"页面在动、文字不动"。
+  // 这正是用户报的"字体移动方向与页面切换不一致"。
+  check(
+    `${label}: 标题文字不再只做淡化`,
+    !!fwd && !!fwd.titleOldAnim && !/Fade/i.test(fwd.titleOldAnim),
+    fwd ? `title layer: ${fwd.titleOldAnim || '(none)'}` : '(null)',
+  );
+  check(
+    `${label}: 标题文字与页面同向同量`,
+    !!fwd &&
+      fwd.titleOldPeak[0] === fwd.rootOldPeak[0] &&
+      fwd.titleOldPeak[1] === fwd.rootOldPeak[1] &&
+      fwd.titleNewPeak[0] === fwd.rootNewPeak[0] &&
+      fwd.titleNewPeak[1] === fwd.rootNewPeak[1] &&
+      fwd.titleNewPeak[1] !== 0,
+    fwd
+      ? `title old=${fwd.titleOldPeak} new=${fwd.titleNewPeak} | root old=${fwd.rootOldPeak} new=${fwd.rootNewPeak}`
+      : '(null)',
+  );
+
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);
   const back = await evaluate(cdp, readTransition(`history.back();`));
   check(`${label}: 后退过渡有方向信息`, back && back.dir === 'back', back ? back.dir : '(null)');
@@ -910,6 +965,202 @@ await runPage(
   );
   },
   '页面切换动画',
+);
+
+
+// ---- 左右翻阅：轴向与「哪来哪去」----
+// 这三类控件是横向翻阅（翻页、更早/更新的文章、页码），此前套用的是
+// 纵向动画：点左右两边的控件，画面却上下动。更隐蔽的是「字体与页面
+// 方向不一致」—— 具名标题层默认拿到 Astro 内建的 astroFadeOut/FadeIn
+// （纯淡化、零位移），页面在动而文字不动。二者都不会让页面切换失败，
+// 只会静默变差，所以必须断言。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+  // 采样一次横向翻阅：读到首帧位移、方向属性与具名层动画名
+  const sampleAxis = (sel, nav) => `(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const xy = (tf) => {
+      if (!tf || tf === 'none') return [0, 0];
+      const m = tf.match(/matrix\\(([^)]+)\\)/);
+      if (!m) return [0, 0];
+      const p = m[1].split(',').map(Number);
+      return p.length >= 6 ? [p[4], p[5]] : [0, 0];
+    };
+    const titleEl = document.querySelector('.post-row-title, .post-title');
+    const tn = titleEl ? getComputedStyle(titleEl).viewTransitionName : '';
+    let snap = null;
+    const t0 = performance.now();
+    const el = document.querySelector(${JSON.stringify('__SEL__')}.replace('__SEL__', ${JSON.stringify(sel)}));
+    if (!el) return { error: 'no element' };
+    const before = { path: location.pathname, scroll: window.scrollY };
+    // 位移不能在"第一帧"读：那一刻伪元素的动画尚未被应用，
+    // computed transform 还是 none（恒为 0,0）。必须逐帧扫描，
+    // 取达到过的**最大位移绝对值**作为方向证据（保留符号）。
+    const peak = { old: [0, 0], new: [0, 0], titleOld: [0, 0], titleNew: [0, 0] };
+    const keep = (slot, v) => {
+      if (!v) return;
+      if (Math.abs(v[0]) > Math.abs(peak[slot][0])) peak[slot][0] = v[0];
+      if (Math.abs(v[1]) > Math.abs(peak[slot][1])) peak[slot][1] = v[1];
+    };
+    if (${JSON.stringify(nav)} === 'back') history.back(); else el.click();
+    return await new Promise((resolve) => {
+      function tick() {
+        {
+          keep('old', xy(getComputedStyle(document.documentElement, '::view-transition-old(root)').transform));
+          keep('new', xy(getComputedStyle(document.documentElement, '::view-transition-new(root)').transform));
+          if (tn) {
+            keep('titleOld', xy(getComputedStyle(document.documentElement, '::view-transition-old(' + tn + ')').transform));
+            keep('titleNew', xy(getComputedStyle(document.documentElement, '::view-transition-new(' + tn + ')').transform));
+          }
+        }
+        if (document.documentElement.getAttribute('data-astro-transition') && !snap) {
+          const read = (s) => { const cs = getComputedStyle(document.documentElement, s); return { name: cs.animationName, dur: cs.animationDuration }; };
+          const ro = getComputedStyle(document.documentElement, '::view-transition-old(root)');
+          const rn = getComputedStyle(document.documentElement, '::view-transition-new(root)');
+          const to = tn ? getComputedStyle(document.documentElement, '::view-transition-old(' + tn + ')') : null;
+          const tnew = tn ? getComputedStyle(document.documentElement, '::view-transition-new(' + tn + ')') : null;
+          snap = {
+            axis: document.documentElement.getAttribute('data-vt-axis'),
+            backFlag: document.documentElement.hasAttribute('data-vt-back'),
+            dir: document.documentElement.getAttribute('data-astro-transition'),
+            rootOld: read('::view-transition-old(root)'),
+            rootNew: read('::view-transition-new(root)'),
+            titleName: tn,
+            titleOldName: to ? to.animationName : null,
+            titleNewName: tnew ? tnew.animationName : null,
+          };
+        }
+        if (performance.now() - t0 > 1100) {
+          snap = Object.assign(snap || {}, {
+            oldStart: peak.old,
+            newStart: peak.new,
+            titleOldStart: peak.titleOld,
+            titleNewStart: peak.titleNew,
+          });
+          resolve({ snap, before });
+          return;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  })()`;
+
+  // A) 点「下一页 →」（右侧控件）→ 内容向左走，新页自右入
+  const next = await evaluate(cdp, sampleAxis('[data-dir="next"]', 'click'));
+  const ns = next && next.snap;
+  check(`${label}: 翻页走横向轴`, !!ns && ns.axis === 'x', ns ? `data-vt-axis=${ns.axis}` : '(null)');
+  check(
+    `${label}: 点右侧控件 → 内容向左走（新页自右入）`,
+    !!ns && ns.oldStart[1] === 0 && ns.newStart[0] > 0 && ns.newStart[1] === 0,
+    ns ? `oldStart=${ns.oldStart} newStart=${ns.newStart}` : '(null)',
+  );
+
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 900))`);
+  // B) 点「← 上一页」（左侧控件）→ 必须与 A 精确镜像
+  const prev = await evaluate(cdp, sampleAxis('[data-dir="prev"]', 'click'));
+  const ps = prev && prev.snap;
+  check(`${label}: 上一页标记为后退语义`, !!ps && ps.backFlag === true, ps ? `data-vt-back=${ps.backFlag}` : '(null)');
+  check(
+    `${label}: 上一页走 back 键帧`,
+    !!ps && ps.rootOld.name === 'vt-out-back' && ps.rootNew.name === 'vt-in-back',
+    ps ? `${ps.rootOld.name} / ${ps.rootNew.name}` : '(null)',
+  );
+  check(
+    `${label}: 上一页是下一页的精确镜像（哪来哪去）`,
+    !!ns && !!ps && ps.newStart[0] === -ns.newStart[0] && ps.newStart[0] < 0,
+    ns && ps ? `next newStart.x=${ns.newStart[0]} vs prev newStart.x=${ps.newStart[0]}` : '(null)',
+  );
+
+  // 翻页前后是**不同文章**，所以没有"共享元素飞行"；但旧文档的标题层
+  // 仍会作为 old-only 图层退场 —— 它同样必须**跟着页面横向走**，
+  // 不能自己纵向飘。这正是"字体移动方向与页面不一致"的横向版本。
+  // （"共享元素同向同量"的断言放在「页面切换动画」块的 列表→文章 处，
+  //   那里才有真正的同名元素对。）
+  check(
+    `${label}: 翻页时旧标题层也走横向（不纵向飘）`,
+    !!ns && !!ns.titleOldStart && ns.titleOldStart[1] === 0 && Math.abs(ns.titleOldStart[0]) > 0,
+    ns ? `titleOld peak=${ns.titleOldStart}（root old peak=${ns.oldStart}）` : '(null)',
+  );
+
+  // D) 浏览器返回键（无被点击元素）也要保持横向
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 900))`);
+  const bback = await evaluate(cdp, sampleAxis('[data-dir="prev"]', 'back'));
+  const bs = bback && bback.snap;
+  check(
+    `${label}: 浏览器返回键仍保持横向`,
+    !!bs && bs.axis === 'x' && bs.backFlag === true,
+    bs ? `axis=${bs.axis} back=${bs.backFlag}` : '(null)',
+  );
+  },
+  '左右翻阅动画',
+);
+
+// ---- 文章页底部：更新的文章（左）/ 更早的文章（右）----
+// 与翻页同理：它们是左右翻阅，必须互为镜像。
+await runPage(
+  `${BASE}/posts/why-i-write/`,
+  async (cdp, label) => {
+  const sampleNav = (sel) => `(async () => {
+    const xy = (tf) => {
+      if (!tf || tf === 'none') return [0, 0];
+      const m = tf.match(/matrix\\(([^)]+)\\)/);
+      if (!m) return [0, 0];
+      const p = m[1].split(',').map(Number);
+      return p.length >= 6 ? [p[4], p[5]] : [0, 0];
+    };
+    const peak = { old: [0, 0], nu: [0, 0] };
+    const keep = (s, v) => {
+      if (Math.abs(v[0]) > Math.abs(peak[s][0])) peak[s][0] = v[0];
+      if (Math.abs(v[1]) > Math.abs(peak[s][1])) peak[s][1] = v[1];
+    };
+    const t0 = performance.now();
+    const el = document.querySelector(${JSON.stringify(sel)});
+    if (!el) return { error: 'no el' };
+    const dirAttr = el.getAttribute('data-vt-dir');
+    el.click();
+    return await new Promise((resolve) => {
+      let snap = null;
+      function tick() {
+        keep('old', xy(getComputedStyle(document.documentElement, '::view-transition-old(root)').transform));
+        keep('nu', xy(getComputedStyle(document.documentElement, '::view-transition-new(root)').transform));
+        if (document.documentElement.hasAttribute('data-astro-transition') && !snap) {
+          snap = {
+            dirAttr,
+            axis: document.documentElement.getAttribute('data-vt-axis'),
+            back: document.documentElement.hasAttribute('data-vt-back'),
+          };
+        }
+        if (performance.now() - t0 > 1100) { resolve({ snap, peak }); return; }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  })()`;
+
+  const newer = await evaluate(cdp, sampleNav('.post-nav-link.newer'));
+  await evaluate(cdp, `new Promise((r) => setTimeout(r, 900))`);
+  const older = await evaluate(cdp, sampleNav('.post-nav-link.older'));
+
+  check(
+    `${label}: 更新的文章走横向后退`,
+    !!(newer && newer.snap) && newer.snap.axis === 'x' && newer.snap.back === true,
+    newer && newer.snap ? `axis=${newer.snap.axis} back=${newer.snap.back}` : '(null)',
+  );
+  check(
+    `${label}: 更早的文章走横向前进`,
+    !!(older && older.snap) && older.snap.axis === 'x' && older.snap.back === false,
+    older && older.snap ? `axis=${older.snap.axis} back=${older.snap.back}` : '(null)',
+  );
+  check(
+    `${label}: 更新的/更早的文章互为镜像（哪来哪去）`,
+    !!(newer && newer.peak) && !!(older && older.peak) &&
+      newer.peak.nu[0] === -older.peak.nu[0] && newer.peak.nu[0] < 0,
+    newer && older ? `更新的 newPeak.x=${newer.peak.nu[0]} vs 更早的 newPeak.x=${older.peak.nu[0]}` : '(null)',
+  );
+  },
+  '文章前后导航动画',
 );
 
 console.log(results.join('\n'));

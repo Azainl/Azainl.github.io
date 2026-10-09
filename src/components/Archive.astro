@@ -105,6 +105,8 @@ pagePosts.forEach((post, i) => {
         <a
           class="page-btn"
           data-dir="prev"
+          data-vt-axis="x"
+          data-vt-dir="prev"
           href={pageUrl(page - 1)}
           aria-disabled={page === 1 ? 'true' : undefined}
           tabindex={page === 1 ? '-1' : undefined}
@@ -118,6 +120,8 @@ pagePosts.forEach((post, i) => {
                 class="page-number"
                 href={pageUrl(n)}
                 data-page={n}
+                data-vt-axis="x"
+                data-vt-dir={n > page ? 'next' : 'prev'}
                 aria-current={n === page ? 'page' : undefined}
               >
                 {n}
@@ -128,6 +132,8 @@ pagePosts.forEach((post, i) => {
         <a
           class="page-btn"
           data-dir="next"
+          data-vt-axis="x"
+          data-vt-dir="next"
           href={pageUrl(page + 1)}
           aria-disabled={page === totalPages ? 'true' : undefined}
           tabindex={page === totalPages ? '-1' : undefined}
