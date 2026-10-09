@@ -1,30 +1,51 @@
 /* ============================================================
    设计令牌
-   中性底色 + 近黑墨色 + 单一朱砂色点缀（全站锁定）
+   ------------------------------------------------------------
+   锚定风格：Stripe Press（暖纸 + 墨色 + 单一强调色）为材质基准，
+   Monocle 的「kicker → 标题 → 导语」三级层级为版式基准，
+   Tufte 的「细线即全部装饰」为克制基准。
+
+   三条判据（改动前先读，否则会悄悄退回默认感）：
+     1. 底色必须是暖纸，不能是纯白；灰必须有暖调。
+        实测：ground/surface 对比 1.10:1，浮层靠明度差可辨，不靠阴影。
+     2. 正文用衬线（Source Serif 4），无衬线只服务界面。
+        衬线是这套配方的识别度来源，换成无衬线即失去配方。
+     3. 行宽按 **CJK 字符数** 校准，不按 rem 拍脑袋。
+        .prose 用 --measure 约束：34rem / 18px ≈ 30 字/行。
+        （改字号必须同时核对，否则行宽会跟着漂。）
    ============================================================ */
 :root {
-  --bg: #f7f7f4;
-  --bg-soft: #efefeb;
-  --surface: #ffffff;
-  --ink: #1a1a1e;
-  --ink-2: #55555e;
-  /* 元信息灰：原 #8b8b94 对底仅约 3.0:1，压深到 4.6:1 达 WCAG AA */
-  --ink-3: #6f6f77;
-  /* 强调朱砂红：压深到 #c5321a（对 #f7f7f4 约 5.09:1），hover/链接态文字达 WCAG AA */
-  --accent: #c5321a;
-  --accent-soft: rgba(197, 50, 26, 0.09);
-  --on-accent: #ffffff;
-  --line: rgba(26, 26, 30, 0.12);
-  --line-strong: rgba(26, 26, 30, 0.24);
-  --code-bg: #efefeb;
-  --shadow: 0 1px 2px rgba(26, 26, 30, 0.05);
+  /* ---- 材质：暖纸 ---- */
+  --bg: #f2ede1;
+  --bg-soft: #e9e2d2;
+  --surface: #fbf8f1;
+  --ink: #1c1a16;
+  --ink-2: #514b43;
+  /* 元信息灰：对暖纸 5.08:1，达 WCAG AA（原 #6f6f77 为 4.64:1） */
+  --ink-3: #6b6355;
+  /* 强调朱砂：色相与品牌一致（保留识别度），在新暖纸底上 5.03:1 达 AA。
+     旧值 #c5321a 在新底上仅 4.67:1 —— 换底色必须重算对比度，这是硬约束。 */
+  --accent: #b44126;
+  --accent-soft: rgba(180, 65, 38, 0.1);
+  --on-accent: #fffdf8;
+  --line: rgba(28, 26, 22, 0.13);
+  --line-strong: rgba(28, 26, 22, 0.28);
+  /* 细线（hairline）：本配方里唯一允许的装饰，对底 1.33:1 */
+  --rule: #d8cfbb;
+  --code-bg: #e9e2d2;
+  --shadow: 0 1px 2px rgba(28, 26, 22, 0.06);
 
-  /* 圆角系统：卡片/按钮 8px，标签徽章全圆，行内代码 5px */
-  --radius: 8px;
+  /* ---- 圆角：纸面不圆，控件微圆 ----
+     原来有 8 种取值（8/5/3/2/999/…），属失控。
+     收敛为 4 档：纸面 0 / 控件 4px / 行内 3px / 标签全圆。 */
+  --radius-none: 0;
+  --radius: 4px;
+  --radius-inline: 3px;
   --radius-pill: 999px;
-  --radius-inline: 5px;
 
-  /* 字体：正文与界面用无衬线；文章标题、引用用衬线（中文回退到系统宋体） */
+  /* ---- 字体 ----
+     无衬线只管界面，衬线负责阅读与标题（Stripe Press 的签名）。
+     中文回退保持系统字体，避免额外字体下载。 */
   --font-sans: "Geist Variable", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
   --font-serif: "Source Serif 4 Variable", "Noto Serif CJK SC",
@@ -32,35 +53,62 @@
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
     Consolas, "Courier New", monospace;
 
-  /* 排版：流体字号阶梯（随视口平滑放大，移动端自动收敛） */
-  --text-sm: clamp(0.8125rem, 0.8rem + 0.08vw, 0.875rem);
-  --text-base: clamp(1.0625rem, 1.03rem + 0.18vw, 1.1875rem);
-  --text-lead: clamp(1.125rem, 1.08rem + 0.24vw, 1.3125rem);
-  --text-h3: clamp(1.1875rem, 1.13rem + 0.3vw, 1.375rem);
-  --text-h2: clamp(1.4375rem, 1.34rem + 0.5vw, 1.75rem);
-  /* 正文最佳行宽（中文约 34 字/行） */
+  /* ---- 排版阶梯 ----
+     收敛为**固定档位**而非 27 个散落的 clamp。
+     显示级与正文的比值是硬指标：46 / 18 ≈ 2.56（判据 ≥2.5）。
+     原为 41.6 / 19 = 2.19 —— 标题"大得不够"，这是层级发闷的原因。 */
+  --text-2xs: 0.6875rem; /* 11 —— 标记 */
+  --text-xs: 0.75rem; /* 12 —— 极小标签 */
+  --text-sm: 0.8125rem; /* 13 —— 元信息 */
+  --text-ui: 0.9375rem; /* 15 —— 界面 */
+  --text-base: 1rem; /* 16 —— 界面正文 */
+  --text-md: 1.125rem; /* 18 —— 阅读正文 */
+  --text-lead: 1.25rem; /* 20 —— 导语 */
+  --text-h3: 1.375rem; /* 22 */
+  --text-h2: 1.75rem; /* 28 */
+  /* 文章/页面标题：44px。与正文(18px)比为 2.44 —— 略低于通用判据 2.5，
+     但这是**有意**的：它必须比报头的显示级(46px)低一档，否则
+     「站点名」与「文章名」会看起来同样重要。层级靠"差一档"而非"一样大"建立。 */
+  --text-h1: 2.75rem; /* 44 —— 页面/文章标题 */
+  --text-display: clamp(2rem, 5vw, 2.875rem); /* 32→46 —— 报头 */
+
+  /* 正文最佳行宽：34rem，配合 18px 正文 ≈ 30 个中文字/行 */
   --measure: 34rem;
 
   --container: 46rem;
   --container-wide: 58rem;
   --header-h: 3.75rem;
+
+  /* ---- 间距：8pt 体系 ----
+     原来散落 62 种间距值（含 0.15/0.35/0.45/0.55/0.85/2.85rem 等一次性数值），
+     收敛为 9 档。分隔用细线，不靠"再挤一点"制造差异。 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
 }
 
 .dark {
-  --bg: #131315;
-  --bg-soft: #1a1a1e;
-  --surface: #1d1d21;
-  --ink: #ecebe6;
-  --ink-2: #a6a6ad;
-  /* 深底上反向提亮，对 #131315 约 5.5:1，达 AA */
-  --ink-3: #8b8b94;
-  --accent: #ff5b35;
-  --accent-soft: rgba(255, 91, 53, 0.12);
-  --on-accent: #161618;
-  --line: rgba(236, 235, 230, 0.13);
-  --line-strong: rgba(236, 235, 230, 0.26);
-  --code-bg: #1a1a1e;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  /* 暖黑：去掉蓝调，与暖纸形成同一套材质的夜色版本 */
+  --bg: #16140f;
+  --bg-soft: #201d16;
+  --surface: #221e17;
+  --ink: #ede7da;
+  --ink-2: #b0a896;
+  --ink-3: #948b7b;
+  --accent: #e8703f;
+  --accent-soft: rgba(232, 112, 63, 0.14);
+  --on-accent: #16140f;
+  --line: rgba(237, 231, 218, 0.14);
+  --line-strong: rgba(237, 231, 218, 0.3);
+  --rule: #332e24;
+  --code-bg: #201d16;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* ============================================================
@@ -78,10 +126,6 @@ html {
   overflow-y: scroll;
   /* 粘性页头会盖住锚点目标，跳转时预留出页头高度 */
   scroll-padding-top: calc(var(--header-h) + 1rem);
-}
-
-/* 右侧滚动条（Chrome / Edge / Firefox） */
-html {
   scrollbar-color: var(--line-strong) transparent;
   scrollbar-width: thin;
 }
@@ -109,8 +153,8 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.75;
+  font-size: var(--text-base);
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background-color 0.25s ease, color 0.25s ease;
@@ -139,20 +183,20 @@ a {
 
 ::selection {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-inline);
 }
 
 /* 跳转链接：键盘聚焦前藏在视口外，聚焦后滑入，方便无障碍用户直达正文 */
 .skip-link {
   position: fixed;
-  left: 1rem;
-  top: 1rem;
+  left: var(--space-4);
+  top: var(--space-4);
   transform: translateY(-150%);
   z-index: 100;
   padding: 0.55rem 0.95rem;
@@ -174,10 +218,9 @@ a {
   display: none !important;
 }
 
-
 .container {
-  max-width: var(--container);
+  /* 与页头/文章列共用同一条左边缘：换宽度会让各页的文字脊柱错位 */
+  max-width: var(--container-wide);
   margin: 0 auto;
   padding: 0 1.25rem;
 }
-

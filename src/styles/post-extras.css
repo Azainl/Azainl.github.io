@@ -1,7 +1,15 @@
 /* ============================================================
-   目录（TOC）：独立浮层（fixed），右侧跟随页面滚动；
-   阅读进度条改为竖向，集成在目录左侧。
-   窄屏默认隐藏，避免占用正文空间（无“文章前留白”）。
+   目录（TOC）：页边批注（marginalia）
+   ------------------------------------------------------------
+   贴在正文列右侧外缘，与正文同处一条水平带上。
+   设计上刻意**不加边框、不加底色、不加圆角** —— 圆角浮层会读成
+   "一个控件"，而目录本质是正文的旁注。只用一条细线 + 疏排小字。
+
+   位置公式与文章列宽是**耦合**的：
+     TOC 左缘 ≈ 视口中心 + 文章列半宽，且要保持 ≥12px 间隙。
+   文章列宽 = calc(--measure + 2.5rem) = 36.5rem，半宽 18.25rem；
+   用 32rem 作基准留出余量，两侧才不会在断点附近相撞。
+   改文章列宽时必须回来核对这里。
    ============================================================ */
 .toc-rail {
   display: none;
@@ -11,24 +19,14 @@
   .toc-rail {
     display: block;
     position: fixed;
-    /* 比原来再往下一点，与标题区拉开距离 */
-    top: calc(var(--header-h) + 2.25rem);
-    /* 往右靠：贴着居中文章容器的右侧外缘。
-       用 max() 兜底：断点附近两侧留白几乎为 0，纯 calc 会贴死视口右缘 */
-    right: max(1.75rem, calc(50% - 32rem - 0.75rem));
-    width: 13rem;
+    top: calc(var(--header-h) + 3rem);
+    right: max(1.5rem, calc(50% - 32rem - 0.75rem));
+    width: 12rem;
     max-height: calc(100vh - var(--header-h) - 4rem);
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
     z-index: 15; /* 低于页头(20)，滚动时不会盖住页头 */
-  }
-  /* 留白必须加在 .post 上，不能只加 .prose：
-     标题、导语、标签、上下篇都在 .post 里但不在 .prose 里，
-     只给 .prose 加留白的话，长标题照样被浮层盖住。
-     空白在文章「旁边」，不在「前面」。 */
-  .post {
-    padding-right: 15rem;
   }
 }
 
@@ -36,12 +34,12 @@
 .toc-toggle {
   display: none;
   align-items: center;
-  gap: 0.4rem;
-  margin-top: 1.1rem;
-  padding: 0.5rem 0.85rem;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding: 0.4rem 0.8rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-soft);
+  border-radius: var(--radius);
+  background: transparent;
   color: var(--ink-2);
   font-size: var(--text-sm);
   cursor: pointer;
@@ -56,7 +54,7 @@
 .toc-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(22, 20, 15, 0.42);
   z-index: 30;
 }
 
@@ -73,10 +71,10 @@
     bottom: 0;
     width: min(20rem, 86vw);
     max-height: none;
-    padding: 1.25rem 1.1rem;
+    padding: var(--space-6) 1.1rem;
     background: var(--bg);
-    border-left: 1px solid var(--line);
-    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.12);
+    border-left: 1px solid var(--rule);
+    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.16);
     overflow-y: auto;
     transform: translateX(100%);
     visibility: hidden;
@@ -87,7 +85,6 @@
     transform: translateX(0);
     visibility: visible;
   }
-  /* 抽屉里标题上方留点空间，避免贴顶 */
   .toc-rail .toc {
     border: none;
     background: transparent;
@@ -96,7 +93,7 @@
   /* 窄屏下上一篇/下一篇纵向堆叠、方向统一 */
   .post-nav {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: var(--space-3);
   }
   .post-nav-link.older {
     text-align: left;
@@ -110,23 +107,21 @@
   }
 }
 
+/* 目录本体：一条左侧细线 + 小字条目，无边框无底色 */
 .toc {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.9rem 1.1rem 0.9rem 1.4rem;
-  background: var(--bg-soft);
+  padding-left: 1rem;
 }
 
-/* 阅读进度条：竖向，置于目录左侧，随页面滚动从顶部向下填充 */
+/* 阅读进度：细线随滚动向下填充（竖向） */
 .toc-progress {
   position: absolute;
-  left: 0.6rem;
-  top: 0.9rem;
-  bottom: 0.9rem;
+  left: 0;
+  top: 0.15rem;
+  bottom: 0.15rem;
   width: 2px;
-  background: var(--line);
-  border-radius: 2px;
+  background: var(--rule);
+  border-radius: 1px;
   overflow: hidden;
 }
 .toc-progress-bar {
@@ -140,10 +135,10 @@
 }
 
 .toc-title {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-3);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
@@ -153,31 +148,26 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 .toc-list a {
   display: block;
-  padding: 0.2rem 0.55rem;
-  border-left: 2px solid transparent;
-  border-radius: 0 var(--radius-inline) var(--radius-inline) 0;
-  color: var(--ink-2);
+  padding: 0.25rem 0;
+  color: var(--ink-3);
   text-decoration: none;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  transition: color 0.15s ease, border-color 0.15s ease,
-    background-color 0.15s ease;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  transition: color 0.15s ease;
 }
 .toc-list a:hover {
-  color: var(--accent);
+  color: var(--ink);
 }
 .toc-list a.active {
   color: var(--accent);
   font-weight: 600;
-  border-left-color: var(--accent);
-  background: var(--accent-soft);
 }
 .toc-depth-3 {
-  padding-left: 1.5rem;
+  padding-left: 0.9rem;
 }
 
 /* ============================================================
@@ -193,11 +183,11 @@
 }
 .code-lang {
   position: absolute;
-  top: 0.55rem;
+  top: 0.6rem;
   left: 0.9rem;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
   color: var(--ink-3);
   text-transform: uppercase;
   pointer-events: none;
@@ -205,7 +195,7 @@
 .code-copy {
   position: absolute;
   top: 0.4rem;
-  right: 0.5rem;
+  right: 0.4rem;
   width: 1.85rem;
   height: 1.85rem;
   display: inline-flex;
@@ -271,4 +261,3 @@
     animation-duration: 0.15s !important;
   }
 }
-
