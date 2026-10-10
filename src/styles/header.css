@@ -33,7 +33,7 @@
 .header-inner {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 var(--gutter);
   height: var(--header-h);
   display: flex;
   align-items: center;

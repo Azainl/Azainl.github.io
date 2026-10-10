@@ -18,7 +18,7 @@
   margin: 0 auto;
   /* 报头下方留一条细线：报刊名版线（nameplate rule）的收敛写法。
      它是本页唯一的横向装饰，用来把「刊头」与「要目」分开。 */
-  padding: var(--space-16) 1.25rem var(--space-6);
+  padding: var(--space-16) var(--gutter) var(--space-6);
   border-bottom: 1px solid var(--rule);
 }
 
@@ -51,7 +51,7 @@
 
 .home-block-title {
   margin: 0 0 var(--space-6);
-  padding: 0 1.25rem;
+  padding: 0 var(--gutter);
   font-family: var(--font-serif);
   font-size: var(--text-h2);
   font-weight: 600;
@@ -63,7 +63,7 @@
    占掉一整屏——卡片会把导航伪装成内容。 */
 .home-topics {
   margin-top: var(--space-12);
-  padding: var(--space-12) 1.25rem;
+  padding: var(--space-12) var(--gutter);
   border-top: 1px solid var(--rule);
 }
 
@@ -104,7 +104,7 @@
 .colophon {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-8) 1.25rem var(--space-16);
+  padding: var(--space-8) var(--gutter) var(--space-16);
   border-top: 1px solid var(--rule);
   color: var(--ink-3);
   font-size: var(--text-sm);
@@ -120,7 +120,7 @@
 .archive {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: 0 1.25rem var(--space-16);
+  padding: 0 var(--gutter) var(--space-16);
 }
 
 .year-group {
@@ -166,7 +166,7 @@
 .post-row > a {
   display: grid;
   grid-template-columns: 6.5rem 1fr;
-  gap: var(--space-2) 1.25rem;
+  gap: var(--space-2) var(--gutter);
   padding: var(--space-6) var(--space-3);
   margin: 0 calc(var(--space-3) * -1);
   border-radius: var(--radius);
@@ -243,7 +243,7 @@
    ⇒ 补上对称的 32px（--space-8），上下各 32px。
    不用负 margin 去抵消 <a> 的内边距：那会让无标签的行也跟着缩。 */
 .post-row .tag-list {
-  margin: var(--space-2) 0 var(--space-8) calc(6.5rem + 1.25rem);
+  margin: var(--space-2) 0 var(--space-8) calc(var(--date-col) + var(--gutter));
 }
 
 .post-row > a:hover .post-row-title,

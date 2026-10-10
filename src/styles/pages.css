@@ -91,7 +91,7 @@
 .search-page {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-12) 1.25rem var(--space-16);
+  padding: var(--space-12) var(--gutter) var(--space-16);
 }
 
 .search-box {
@@ -206,7 +206,7 @@ mark {
 .page-head {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-12) 1.25rem var(--space-8);
+  padding: var(--space-12) var(--gutter) var(--space-8);
 }
 
 .page-head h1 {
@@ -245,7 +245,7 @@ mark {
 .reading {
   max-width: calc(var(--measure) + 2.5rem);
   margin: 0 auto;
-  padding: var(--space-12) 1.25rem var(--space-16);
+  padding: var(--space-12) var(--gutter) var(--space-16);
 }
 
 /* 列内的题头不再自带宽度与居中：它已经在外层列里了。
@@ -270,7 +270,7 @@ mark {
      收窄后正文、标题、导语、标签共用同一条左右边缘，右侧紧邻目录浮层。 */
   max-width: calc(var(--measure) + 2.5rem);
   margin: 0 auto;
-  padding: var(--space-12) 1.25rem var(--space-16);
+  padding: var(--space-12) var(--gutter) var(--space-16);
 }
 
 .post-header {
@@ -665,7 +665,7 @@ mark {
 .footer-inner {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-8) 1.25rem var(--space-12);
+  padding: var(--space-8) var(--gutter) var(--space-12);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-8);
@@ -715,7 +715,7 @@ mark {
 .not-found {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-24) 1.25rem var(--space-16);
+  padding: var(--space-24) var(--gutter) var(--space-16);
   text-align: left;
 }
 
