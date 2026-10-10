@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "og": "node scripts/generate-og.mjs",
     "check": "node scripts/check.mjs",
+    "check:skills": "node scripts/link-skills.mjs --check",
+    "link:skills": "node scripts/link-skills.mjs",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {

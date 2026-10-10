@@ -11,3 +11,10 @@ dist/
 .reasonix/
 reasonix.toml
 .workbuddy/
+
+# 技能目录（T-10）：这里是**junction**，指向 D:CodeDeepseek.agentsskills，
+# 目的是让在 blog/ 下开会话时技能仍可被发现（DSH 从 cwd 向上找 .git，
+# 在 blog 里就是 blog 本身，看不到上一级）。必须在版本控制之外：
+# git 会**跟随** junction 把 15 个技能的全部文件复制进仓库（实测 git add -n
+# 列出了每一个 SKILL.md），既臃肿又会在别的机器上变成失效的普通文件。
+.agents/skills/
