@@ -76,7 +76,7 @@
     padding: var(--space-6) 1.1rem;
     background: var(--bg);
     border-left: 1px solid var(--rule);
-    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.16);
+    box-shadow: var(--shadow-drawer);
     overflow-y: auto;
     transform: translateX(100%);
     visibility: hidden;

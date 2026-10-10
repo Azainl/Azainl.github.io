@@ -212,7 +212,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(28, 26, 22, 0.14);
+  box-shadow: var(--shadow-popover);
   overflow: hidden;
   display: none;
   z-index: 30;

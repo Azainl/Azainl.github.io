@@ -47,6 +47,12 @@
   --rule: #d8cfbb;
   --code-bg: #e9e2d2;
   --shadow: 0 1px 2px rgba(28, 26, 22, 0.06);
+  /* 浮层阴影按**层级**命名，而不是按数值。此前这三处各自硬编码 rgba：
+     同一套设计里出现三种互不相干的投影参数，且深色主题下沿用黑色阴影
+     在近黑底上几乎不可见。集中到令牌后，深色可以独立取值。 */
+  --shadow-popover: 0 12px 32px rgba(28, 26, 22, 0.14);
+  --shadow-drawer: -8px 0 28px rgba(0, 0, 0, 0.16);
+  --shadow-focus: 0 4px 16px rgba(0, 0, 0, 0.12);
 
   /* ---- 圆角：纸面不圆，控件微圆 ----
      原来有 8 种取值（8/5/3/2/999/…），属失控。
@@ -236,7 +242,7 @@ a {
   color: var(--ink);
   font-size: var(--text-sm);
   text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-focus);
   transition: transform 0.15s ease;
 }
 .skip-link:focus,
