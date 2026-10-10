@@ -764,6 +764,125 @@ if (searchJsonRes.ok) {
   );
 }
 
+// ---- 结构化数据 / 无障碍 / 图片优先级（T-09 固化本次审计成果）----
+// 这三项都是"不会让任何功能失败"的缺陷类型：JSON-LD 缺失、live region 缺失、
+// 首图懒加载，页面看起来与功能上都完全正常。所以只能靠断言守。
+
+// ① 标签页与分页页的 JSON-LD（T-02）：必须存在且能解析，且条数与页面渲染一致
+for (const path of ['/tags/astro/', '/page/2/']) {
+  const res = await fetch(`${BASE}${path}`);
+  const html = await res.text();
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  let parsed = null;
+  try {
+    parsed = blocks.map((b) => JSON.parse(b));
+  } catch {
+    parsed = null;
+  }
+  check(`${path}: 含可解析的 JSON-LD`, parsed !== null && parsed.length > 0, `${blocks.length} 块`);
+
+  if (parsed) {
+    // 递归展开 @graph，找出 CollectionPage（T-02 的产物）
+    const flat = [];
+    const walk = (n) => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(walk);
+      flat.push(n);
+      Object.values(n).forEach(walk);
+    };
+    parsed.forEach(walk);
+    const cp = flat.find((n) => n['@type'] === 'CollectionPage');
+    check(`${path}: 含 CollectionPage`, !!cp);
+    // 结构化数据必须与可见内容同源 —— 声明了页面上没有的文章就是欺骗爬虫
+    // 只数列表项本身。两个坑：
+    //  1) `class="post-row` 也会匹配 `post-row-title`，每篇被算两次（实测 12 vs 6）；
+    //  2) 首页/分页页的类名是 `post-row reveal`，标签页是 `post-row` ——
+    //     只认收尾引号会漏掉前者（实测 dom=0）。故用 [ "\s] 收尾。
+    const domCount = (html.match(/<li class="post-row[ "]/g) || []).length;
+    const ldCount = cp?.mainEntity?.numberOfItems ?? -1;
+    check(
+      `${path}: JSON-LD 条数与页面一致`,
+      domCount > 0 && ldCount === domCount,
+      `ld=${ldCount} dom=${domCount}`,
+    );
+    // position 必须从 1 连续递增，跳号会让富结果校验失败
+    const positions = (cp?.mainEntity?.itemListElement ?? []).map((x) => x.position);
+    check(
+      `${path}: breadcrumb/item position 连续`,
+      positions.length > 0 && positions.every((v, i) => v === i + 1),
+      positions.join(','),
+    );
+    // 面包屑（T-03）
+    const bc = flat.find((n) => n['@type'] === 'BreadcrumbList');
+    check(
+      `${path}: 含 BreadcrumbList 且首级为首页`,
+      !!bc && bc.itemListElement?.[0]?.name === '首页',
+      bc ? bc.itemListElement.map((x) => x.name).join(' > ') : '(none)',
+    );
+  }
+}
+
+// ② 文章页 og:type 与 BlogPosting.image（T-18）
+{
+  const res = await fetch(`${BASE}/posts/blog-build-notes/`);
+  const html = await res.text();
+  check('文章页 og:type=article', /<meta property="og:type" content="article"/.test(html));
+  check('文章页含 article:published_time', /<meta property="article:published_time"/.test(html));
+  const m = /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+  let hasImage = false;
+  if (m) {
+    try {
+      const flat = [];
+      const walk = (n) => {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(walk);
+        flat.push(n);
+        Object.values(n).forEach(walk);
+      };
+      walk(JSON.parse(m[1]));
+      hasImage = !!flat.find((n) => n['@type'] === 'BlogPosting')?.image;
+    } catch {}
+  }
+  check('BlogPosting 含 image', hasImage);
+  // 首页必须仍然是 website，不能被文章页的改动带偏
+  const homeRes = await fetch(`${BASE}/`);
+  const homeHtml = await homeRes.text();
+  check('首页 og:type 仍为 website', /<meta property="og:type" content="website"/.test(homeHtml));
+}
+
+// ③ 搜索 aria-live 播报区（T-04）：页头与搜索页都要有
+for (const path of ['/about/', '/search/']) {
+  const res = await fetch(`${BASE}${path}`);
+  const html = await res.text();
+  // 必须同时存在 aria-live 与 sr-only 容器：只有 sr-only 不播报，
+  // 只有 aria-live 则可能被 display:none 挡在可访问性树外
+  check(`${path}: 搜索播报区含 aria-live`, /aria-live="polite"/.test(html));
+  check(`${path}: 播报区用 sr-only（不移出可访问性树）`, /class="sr-only"[^>]*aria-live|aria-live[^>]*class="sr-only"/.test(html));
+}
+
+// ④ 正文首图即时加载（T-05）：修复前全部 lazy，会让首图无法成为 LCP 元素
+{
+  const res = await fetch(`${BASE}/posts/small-site/`);
+  const html = await res.text();
+  const imgs = [...html.matchAll(/<img [^>]*>/g)].map((m) => m[0]);
+  check('正文有图片可断言', imgs.length > 0, `${imgs.length} 张`);
+  if (imgs.length > 0) {
+    check('首图 loading=eager', /loading="eager"/.test(imgs[0]));
+    check('首图 fetchpriority=high', /fetchpriority="high"/.test(imgs[0]));
+    // 其余图必须仍是 lazy，否则等于把全篇图都提前拉
+    check(
+      '非首图仍为 lazy',
+      imgs.slice(1).every((t) => /loading="lazy"/.test(t)),
+      `${imgs.length - 1} 张后续图`,
+    );
+    // 防 CLS 回归：width/height/srcset 一个都不能少
+    check(
+      '首图保留 width/height/srcset（防 CLS 回归）',
+      imgs.every((t) => /width="\d+"/.test(t) && /height="\d+"/.test(t) && /srcset="/.test(t)),
+    );
+  }
+}
+
 // ---- 页面切换动画（View Transitions）----
 // 这几项是"改了样式但看不出坏了"的典型：方向性关键帧若选择器不匹配，
 // 页面**照样能正常切换**，只是方向动画静默失效 —— 必须断言。
