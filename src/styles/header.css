@@ -134,20 +134,25 @@
   transform: translateY(1px);
 }
 
-/* 页头搜索框：**打开前后必须是同一支笔画的同一个盒子**。
+/* 页头搜索框：**保留打开时的延展动画，只把未打开时的底色钉住**。
    ------------------------------------------------------------
-   这里曾写成「默认透明 + 仅下划线，聚焦才浮出纸面」，实测两种状态的
-   computed 颜色并不一致：
-     默认  background: rgba(0, 0, 0, 0)    边框仅下边 1px
-     聚焦  background: rgb(251, 248, 241)  四边 1px 朱砂 + 光晕
-   于是输入框在"一段朴素文字"与"一个白底红框的盒子"之间跳变 ——
-   点开它，盒子像凭空长出来一样。
+   这里要分开看两件事 —— 动画与底色：
 
-   现以**打开后的样子**作为静态基准：纸面底色 + 四边细线始终存在，
-   聚焦只把线色换成朱砂并加光晕（那才是"焦点在哪"的语义反馈，
-   而不是盒子存在与否的开关）。宽度也固定下来，不再聚焦时抽长。
-   这与搜索页的 .search-input 完全一致 —— 两处本就是同一个控件，
-   此前页头这一支是唯一的例外。 */
+   1. 动画（保持原样）：未打开 180px、聚焦 240px，配 0.2s 的 width 过渡；
+      描边由「仅下边一条 --line 线」在聚焦时被 border-color 一次性
+      点亮四边，再叠一层光晕。点开时输入框向左延展、一条线长成盒子 ——
+      这是页头唯一一处"活"的动作。
+
+   2. 底色（唯一改动）：原写法未打开时是 transparent，聚焦才变成
+      var(--surface) 纸面。实测两态 computed 不一致：
+        未打开  background: rgba(0, 0, 0, 0)
+        聚焦    background: rgb(251, 248, 241)
+      于是点开的瞬间底色"刷"地由透变白，颜色先于动画跳了一步。
+      现让未打开时就取 --surface —— 底色两态同值、不参与变化。
+
+   不要再把宽度也钉死。曾试过固定 220px「两态同尺寸」，虽然确实不抽动了，
+   却把打开时唯一的动感一并抹掉 —— 不抽动的正解是让其余部分不受影响，
+   而不是取消动画。 */
 .header-search {
   position: relative;
 }
@@ -163,16 +168,23 @@
 }
 
 .header-search-input {
-  /* 固定宽度：聚焦不再抽长，避免点开时整块页头跟着位移 */
-  width: 220px;
+  /* 未打开的宽度；聚焦时向左延展到 240px（见下方 :focus） */
+  width: 180px;
   padding: 0.35rem 0.6rem 0.35rem 1.9rem;
   font-family: inherit;
   font-size: var(--text-ui);
   color: var(--ink);
+  /* 唯一与原始写法不同之处：原本是 transparent，点开才变纸面。
+     现在未打开就取 --surface，底色两态同值，开合时不再跳色。 */
   background: var(--surface);
-  border: 1px solid var(--line);
+  /* 四边都留 1px，但未打开时只有下边着色 —— 聚焦时 border-color
+     一次性点亮四边，于是"一条线"长成"一个盒子"（不产生布局位移）。 */
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--line);
   border-radius: var(--radius);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  /* background-color 现已两态同值，列在这里只为与原始过渡清单保持一致 */
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    background-color 0.15s ease, width 0.2s ease;
 }
 
 .header-search-input::placeholder {
@@ -181,7 +193,8 @@
 
 .header-search-input:focus {
   outline: none;
-  /* 底色不参与变化：打开前后同为 --surface，只有线色与光晕在动 */
+  /* 焦点反馈 = 宽度延展 + 四边描边点亮 + 光晕 */
+  width: 240px;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }

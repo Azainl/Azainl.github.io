@@ -1205,15 +1205,18 @@ await runPage(
   '页头可读性',
 );
 
-// ---- 页头搜索框：打开前后必须是同一个盒子 ----
-// 起因：默认态写成「透明底 + 仅下边线」，聚焦态才变成「纸面底 + 四边线」。
-// 实测两者的 computed 颜色并不一致：
-//   默认 background: rgba(0, 0, 0, 0)      边框仅下边 1px
-//   聚焦 background: rgb(251, 248, 241)    四边 1px + 朱砂 + 光晕
-// 于是点开搜索框时，盒子像凭空长出来一样 —— 用户报的正是"打开前后颜色不一致"。
+// ---- 页头搜索框：保留打开动画，只把"未打开时的底色"钉住 ----
+// 起因：原本未打开时 background: transparent，聚焦才变成 --surface 纸面。
+// 用户反馈"打开前后颜色不一致"。实测两态：
+//   未打开  background: rgba(0, 0, 0, 0)     宽 180px，仅下边 1px --line
+//   聚焦    background: rgb(251, 248, 241)   宽 240px，四边 1px 朱砂 + 光晕
+// 唯一改动：未打开时也取 --surface —— 底色两态同值，开合不再跳色。
 //
-// 判据：底色、四边线宽、几何尺寸在开/关两态**必须完全相同**；
-// 允许变化的只有线色与光晕（那表达"焦点在哪"，不是盒子存在与否）。
+// **判据必须跟着改**：这里不能再断言"两态尺寸相同"。
+// 180 → 240px 的延展正是要保留的动画；曾经为了"不抽动"把它钉死，
+// 结果把打开时唯一的动感也抹掉了 —— 那是治错了病。
+// 真正该守的是「点开时页头**其余部分**不跟着动」，所以改为测量
+// 刊头 / 导航 / 主题按钮在开合两态的位置。
 await runPage(
   `${BASE}/`,
   async (cdp, label) => {
@@ -1222,6 +1225,12 @@ await runPage(
       if (!i) return { error: 'no input' };
       const cs = getComputedStyle(i);
       const r = i.getBoundingClientRect();
+      const probe = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const b = el.getBoundingClientRect();
+        return { left: Math.round(b.left), right: Math.round(b.right) };
+      };
       return {
         bg: cs.backgroundColor,
         topW: cs.borderTopWidth,
@@ -1234,6 +1243,9 @@ await runPage(
         rightColor: cs.borderRightColor,
         width: Math.round(r.width),
         height: Math.round(r.height),
+        wordmark: probe('.wordmark'),
+        nav: probe('.site-nav'),
+        toggle: probe('.theme-toggle'),
       };
     })()`;
     const closed = await evaluate(cdp, readState());
@@ -1244,34 +1256,6 @@ await runPage(
     await sleep(400);
 
     const ok = closed && focused && !closed.error && !focused.error;
-    check(
-      `${label}: 搜索框底色打开前后一致`,
-      ok && closed.bg === focused.bg,
-      ok ? `closed=${closed.bg} focused=${focused.bg}` : '(null)',
-    );
-    check(
-      `${label}: 搜索框四边线打开前后一致`,
-      ok &&
-        closed.topW === focused.topW &&
-        closed.botW === focused.botW &&
-        closed.leftW === focused.leftW &&
-        closed.rightW === focused.rightW &&
-        parseFloat(closed.topW) > 0 &&
-        parseFloat(closed.leftW) > 0,
-      ok
-        ? `closed=${closed.topW}/${closed.botW}/${closed.leftW}/${closed.rightW} focused=${focused.topW}/${focused.botW}/${focused.leftW}/${focused.rightW}`
-        : '(null)',
-    );
-    // 尺寸不能变：否则点开时整个页头会跟着抽动
-    check(
-      `${label}: 搜索框尺寸打开前后一致（点开不抽动）`,
-      ok && closed.width === focused.width && closed.height === focused.height,
-      ok ? `closed=${closed.width}x${closed.height} focused=${focused.width}x${focused.height}` : '(null)',
-    );
-    // 真正的判据：**默认态就四边可见**。
-    // 只查线宽会漏 —— 旧写法是 `border: 1px solid transparent`，
-    // 四边宽度本来就是 1px，但默认态颜色是透明的，盒子并不存在。
-    // 所以必须查"默认态的四边线是否真的可见（alpha > 0）"。
     const visible = (c) => {
       if (!c || typeof c !== 'string') return false;
       if (/^transparent$/.test(c)) return false;
@@ -1281,19 +1265,72 @@ await runPage(
       if (rgba) return parseFloat(rgba[1]) > 0;
       return /^rgb\(/.test(c) || /^color\(/.test(c);
     };
+    // "实色"直接用 visible 判定：它同时覆盖 rgb() 与 rgba()/color() 两种序列表述。
+    // 不要另写一个只查斜杠 alpha 的正则 —— Chrome 对旧值报的是
+    // rgba(0, 0, 0, 0)（逗号形式，没有斜杠），只查斜杠会把它误判成实色。
+    const solid = visible;
+
+    // ① 用户报的那个问题本身：底色开合两态必须同值，且未打开时已是实色。
+    //    只查"两态相等"不够 —— 两态都是 transparent 也相等，所以再查实色。
     check(
-      `${label}: 默认态四边线可见（盒子一进页面就存在）`,
-      ok && visible(closed.topColor) && visible(closed.botColor) &&
-        visible(closed.leftColor) && visible(closed.rightColor),
+      `${label}: 搜索框底色打开前后一致`,
+      ok && closed.bg === focused.bg,
+      ok ? `closed=${closed.bg} focused=${focused.bg}` : '(null)',
+    );
+    check(
+      `${label}: 未打开时底色已是纸面（不是 transparent）`,
+      ok && solid(closed.bg),
+      ok ? `closed=${closed.bg}` : '(null)',
+    );
+
+    // ② 打开动画必须还在：宽度要真的延展，且高度不变。
+    //    否则等于把动效删了 —— 而这正是本次要恢复的东西。
+    check(
+      `${label}: 打开时有宽度延展动画`,
+      ok && focused.width - closed.width >= 40 && closed.height === focused.height,
+      ok ? `closed=${closed.width}px focused=${focused.width}px` : '(null)',
+    );
+
+    // ③ 真正的"不抽动"判据：页头其余部分在开合两态不得位移。
+    //    搜索框右对齐、向**左**延展，所以左邻（导航）与右邻（主题按钮）
+    //    都必须纹丝不动 —— 这才是"不抽动"该测的东西。
+    const still =
+      ok &&
+      closed.wordmark && focused.wordmark &&
+      closed.nav && focused.nav &&
+      closed.toggle && focused.toggle &&
+      closed.wordmark.left === focused.wordmark.left &&
+      closed.nav.left === focused.nav.left &&
+      closed.nav.right === focused.nav.right &&
+      closed.toggle.left === focused.toggle.left &&
+      closed.toggle.right === focused.toggle.right;
+    check(
+      `${label}: 点开时页头其余部分不位移`,
+      still,
       ok
-        ? `top=${closed.topColor} bottom=${closed.botColor} left=${closed.leftColor} right=${closed.rightColor}`
+        ? `nav ${closed.nav?.left}→${focused.nav?.left} · 主题 ${closed.toggle?.right}→${focused.toggle?.right} · 刊头 ${closed.wordmark?.left}→${focused.wordmark?.left}`
         : '(null)',
     );
-    // 反向确认"聚焦确实有反馈"：线色要变，否则这条断言会奖励一个死掉的焦点态
+
+    // ④ 未打开时仍有"存在感"：下边线可见。盒子感由下划线 + 纸面底共同给出。
     check(
-      `${label}: 聚焦仍有可见反馈（线色变化）`,
-      ok && closed.topColor !== focused.topColor,
-      ok ? `closed=${closed.topColor} focused=${focused.topColor}` : '(null)',
+      `${label}: 未打开时下边线可见`,
+      ok && visible(closed.botColor) && parseFloat(closed.botW) > 0,
+      ok ? `bottom=${closed.botColor} w=${closed.botW}` : '(null)',
+    );
+
+    // ⑤ 反向确认"聚焦确实有反馈"：不能奖励一个死掉的焦点态。
+    //    要求四边同时点亮（未打开时只有下边有色）。
+    check(
+      `${label}: 聚焦点亮四边（线色变化）`,
+      ok &&
+        closed.topColor !== focused.topColor &&
+        visible(focused.topColor) &&
+        visible(focused.leftColor) &&
+        visible(focused.rightColor),
+      ok
+        ? `top ${closed.topColor} → ${focused.topColor}`
+        : '(null)',
     );
   },
   '搜索框开合一致',
