@@ -336,6 +336,10 @@ const links = [
       if (input.value.trim()) void render(input.value.trim());
     });
 
+    // 外部（点击别处 / 页面切换）请求关闭时，同样经过 closePopover，
+    // 保证 .open 与 aria-expanded / aria-activedescendant 一起复位
+    container.addEventListener('search:close', () => closePopover());
+
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         input.value = '';
@@ -396,9 +400,11 @@ const links = [
     outsideBound = true;
     document.addEventListener('pointerdown', (event) => {
       const container = document.getElementById('header-search');
-      if (container && !container.contains(event.target as Node)) {
-        document.getElementById('search-popover')?.classList.remove('open');
-      }
+      if (!container || container.contains(event.target as Node)) return;
+      // 只移除 .open 会让 aria-expanded 停在 "true"（读屏用户以为面板还开着）。
+      // 统一走 closePopover() —— 那是 initHeader 闭包里的同一个函数，
+      // 这里通过派发一个"请求关闭"的自定义事件来调用它，避免复制一份关闭逻辑。
+      container.dispatchEvent(new CustomEvent('search:close', { bubbles: false }));
     });
   }
 
@@ -440,7 +446,11 @@ const links = [
     updateNav();
     bindOutsideClick();
     bindSearchShortcut();
-    // 上次导航若停在搜索弹层上，切页后要收起来，免得残留在新页面上
-    document.getElementById('search-popover')?.classList.remove('open');
+    // 上次导航若停在搜索弹层上，切页后要收起来，免得残留在新页面上。
+    // 走同一个关闭路径，否则 aria-expanded 会残留为 true（实测）。
+    const searchContainer = document.getElementById('header-search');
+    if (searchContainer) {
+      searchContainer.dispatchEvent(new CustomEvent('search:close', { bubbles: false }));
+    }
   });
 </script>
