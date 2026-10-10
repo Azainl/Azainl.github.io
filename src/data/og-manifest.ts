@@ -30,4 +30,8 @@ export const OG_SLUGS: string[] = [
   'preflight-checks',
   'small-site',
   'writing-short',
+  'borrowed-books',
+  'checklist-purpose',
+  'head-meta',
+  'backup-habit',
 ];
