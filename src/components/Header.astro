@@ -96,10 +96,26 @@ const links = [
   import { vtName } from '../utils/vtName';
 
   let index: PostIndex[] = [];
+  let indexPromise: Promise<PostIndex[]> | null = null;
 
-  buildIndex().then((data) => {
-    index = data;
-  });
+  /**
+   * 按需加载搜索索引。
+   *
+   * 此前在模块顶层无条件调用 buildIndex()，而页头出现在**每一个**页面上，
+   * 于是连 /about/ 与 404 页都会下载整个索引（gzip 约 22.4 KB，占 /about/
+   * 该页传输的 13%，且随文章数线性增长）——绝大多数访问者从未用过搜索。
+   * 改为首次聚焦或输入时才发起；buildIndex 自身已做 Promise 缓存，
+   * 这里再加一层是为了拿到"加载中"的直接句柄，避免重复触发。
+   */
+  function ensureIndex(): Promise<PostIndex[]> {
+    if (!indexPromise) {
+      indexPromise = buildIndex().then((data) => {
+        index = data;
+        return data;
+      });
+    }
+    return indexPromise;
+  }
 
   type ThemePref = 'light' | 'dark' | 'system';
   const THEME_ORDER: ThemePref[] = ['light', 'dark', 'system'];
@@ -205,7 +221,11 @@ const links = [
       syncActiveDescendant();
     }
 
-    function render(query: string) {
+    async function render(query: string) {
+      // 索引此刻可能仍在路上：先等它就绪，否则会把"还没加载完"误报成"没有结果"
+      await ensureIndex();
+      // 等待期间输入可能已被清空或改写，此时这次渲染已过期
+      if (input.value.trim() !== query) return;
       const items = searchIndex(index, query);
       listEl.replaceChildren();
       moreEl.hidden = true;
@@ -261,11 +281,13 @@ const links = [
         closePopover();
         return;
       }
-      timer = window.setTimeout(() => render(q), 120);
+      timer = window.setTimeout(() => void render(q), 120);
     });
 
     input.addEventListener('focus', () => {
-      if (input.value.trim()) render(input.value.trim());
+      // 聚焦即预取：用户开始输入时索引通常已就绪，兼顾"不浪费字节"与"首次搜索不慢"
+      void ensureIndex();
+      if (input.value.trim()) void render(input.value.trim());
     });
 
     input.addEventListener('keydown', (event) => {
@@ -280,14 +302,18 @@ const links = [
           (items[activeIndex] as HTMLAnchorElement).click();
           return;
         }
-        const hits = searchIndex(index, input.value.trim());
-        if (hits.length) {
-          window.location.href = url(`/posts/${hits[0].post.slug}/`);
-        } else {
-          const searchUrl = new URL(url('/search/'), window.location.origin);
-          searchUrl.searchParams.set('q', input.value.trim());
-          window.location.href = searchUrl.toString();
-        }
+        // 直接回车时索引可能尚未加载完，必须等它，否则会误跳到搜索页
+        const q = input.value.trim();
+        void ensureIndex().then(() => {
+          const hits = searchIndex(index, q);
+          if (hits.length) {
+            window.location.href = url(`/posts/${hits[0].post.slug}/`);
+          } else {
+            const searchUrl = new URL(url('/search/'), window.location.origin);
+            searchUrl.searchParams.set('q', q);
+            window.location.href = searchUrl.toString();
+          }
+        });
         return;
       }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
