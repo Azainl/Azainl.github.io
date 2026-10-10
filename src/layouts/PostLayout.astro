@@ -45,6 +45,8 @@ const jsonLd = {
       dateModified: modified.toISOString(),
       inLanguage: 'zh-CN',
       keywords: post.data.tags.join(', '),
+      // 该篇真实的分享图（与 og:image 同一来源，清单缺失时回退全站默认图）
+      image: new URL(url(ogImagePath(post)), Astro.site).href,
       author: { '@type': 'Person', name: SITE.author },
       publisher: { '@type': 'Organization', name: SITE.name },
       mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
@@ -75,6 +77,9 @@ const jsonLd = {
   title={pageTitle}
   description={post.data.description}
   ogImage={ogImagePath(post)}
+  ogType="article"
+  publishedTime={post.data.date.toISOString()}
+  modifiedTime={modified.toISOString()}
 >
   <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
   <article class="post">

@@ -40,6 +40,15 @@ interface Props {
    * 比完全没有更糟（等于主动告诉搜索引擎去收录一个死地址）。
    */
   noindex?: boolean;
+  /**
+   * og:type。文章页传 'article'，其余保持默认 'website'。
+   * 此前全站写死 website —— 文章页因此缺少 article 语义。
+   */
+  ogType?: string;
+  /** 文章首次发布时间（ISO）。仅文章页提供，用于输出 article:published_time */
+  publishedTime?: string;
+  /** 文章最后修订时间（ISO）。与 publishedTime 分开传：修订过的文章两者不同 */
+  modifiedTime?: string;
 }
 
 const {
@@ -48,6 +57,9 @@ const {
   notFound = false,
   ogImage = '/og.png',
   noindex = false,
+  ogType = 'website',
+  publishedTime,
+  modifiedTime,
 } = Astro.props;
 
 // 本页自身的绝对地址：og:url 始终用它。
@@ -76,7 +88,7 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     {/* @font-face 必须和 preload 一起放在 head 里，否则字体声明解析晚于预加载，
         FOIT/FOUT 行为不可控 */}
     <style is:inline set:html={fontFaces}></style>
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={ogType} />
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -84,6 +96,10 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     <meta property="og:image" content={ogImageUrl} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    {/* 文章页才有的发布/修订时间（Open Graph 的 article 命名空间）。
+        非文章页不输出，避免声明不存在的语义。 */}
+    {publishedTime && <meta property="article:published_time" content={publishedTime} />}
+    {modifiedTime && <meta property="article:modified_time" content={modifiedTime} />}
     <meta property="og:locale" content="zh_CN" />
     {/* 1200×630 的横幅卡片要用 summary_large_image，summary 会被裁成小方图 */}
     <meta name="twitter:card" content="summary_large_image" />
