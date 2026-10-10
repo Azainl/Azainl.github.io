@@ -22,12 +22,41 @@ const { name } = Astro.props;
 const posts = (await getPublishedPosts()).filter((post) =>
   post.data.tags.includes(name),
 );
+
+// 标签页此前没有任何结构化数据（全站 22 个标签页均无）。
+// 这里只声明**页面上真实存在的**聚合语义：这是一个汇集页，
+// 主实体是它列出的那组文章 —— 不添加页面没有的字段。
+const tagUrl = new URL(url(`/tags/${tagSlug(name)}/`), Astro.site).href;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: `#${name} · ${SITE.name}`,
+  description: `标签「${name}」下的全部文章。`,
+  url: tagUrl,
+  inLanguage: SITE.locale,
+  isPartOf: {
+    '@type': 'WebSite',
+    name: SITE.title,
+    url: new URL('/', Astro.site).href,
+  },
+  mainEntity: {
+    '@type': 'ItemList',
+    numberOfItems: posts.length,
+    itemListElement: posts.map((post, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: new URL(url(`/posts/${post.id}/`), Astro.site).href,
+      name: post.data.title,
+    })),
+  },
+};
 ---
 
 <BaseLayout
   title={`#${name} · ${SITE.name}`}
   description={`标签「${name}」下的全部文章。`}
 >
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
   <div class="page-head reveal">
     <button
       class="post-back"
