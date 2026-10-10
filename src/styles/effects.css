@@ -172,29 +172,39 @@ html[data-astro-transition='back']::view-transition-new(root) {
   animation-timing-function: var(--vt-in-ease);
 }
 
-/* ---- 具名元素（标题文字）：逐项跟随 root ---- */
+/* ---- 具名元素（标题文字）：逐项跟随 root ----
+   注意 animation-fill-mode: both 是**必需**的，不是可选装饰。
+   具名层用 transition:animate="none" 之后（T-19），Astro 不再为每个元素生成
+   独立规则块；而那个块此前一直顺带提供了 fill-mode。缺了它，动画结束后
+   具名层会立刻弹回未动画状态，实测位移峰值从 -22 变成 -21.674，
+   断言「标题文字与页面同向同量」随即失败（CI 上正是这样先暴露的）。
+   补上后这些通配规则自给自足，不再依赖被删掉的那块生成 CSS。 */
 html[data-astro-transition='forward']::view-transition-old(*) {
   animation-name: vt-out-forward;
   animation-duration: var(--vt-out-dur);
   animation-timing-function: var(--vt-out-ease);
+  animation-fill-mode: both;
 }
 
 html[data-astro-transition='forward']::view-transition-new(*) {
   animation-name: vt-in-forward;
   animation-duration: var(--vt-in-dur);
   animation-timing-function: var(--vt-in-ease);
+  animation-fill-mode: both;
 }
 
 html[data-astro-transition='back']::view-transition-old(*) {
   animation-name: vt-out-back;
   animation-duration: var(--vt-out-dur);
   animation-timing-function: var(--vt-out-ease);
+  animation-fill-mode: both;
 }
 
 html[data-astro-transition='back']::view-transition-new(*) {
   animation-name: vt-in-back;
   animation-duration: var(--vt-in-dur);
   animation-timing-function: var(--vt-in-ease);
+  animation-fill-mode: both;
 }
 
 /* 翻页语义优先于 history 方向：
