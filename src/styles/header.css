@@ -44,7 +44,7 @@
 /* 刊头字标：衬线 + 收紧字距，与正文标题同族 */
 .wordmark {
   font-family: var(--font-serif);
-  font-size: 1.25rem;
+  font-size: var(--text-lead);
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -163,7 +163,7 @@
   top: 50%;
   transform: translateY(-50%);
   color: var(--ink-3);
-  font-size: 1rem;
+  font-size: var(--text-base);
   pointer-events: none;
 }
 

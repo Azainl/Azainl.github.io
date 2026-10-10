@@ -213,7 +213,7 @@
 .post-row .post-row-title {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: 1.25rem;
+  font-size: var(--text-lead);
   font-weight: 600;
   letter-spacing: -0.005em;
   line-height: 1.4;
