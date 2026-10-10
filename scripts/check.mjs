@@ -528,17 +528,86 @@ await runPage(`${BASE}/posts/hello-world/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
     const btn = document.getElementById('back-button');
     const visible = !btn.hidden;
+    const indexAtLoad = window.history.state?.index ?? null;
     btn.click();
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 100));
       if (location.pathname === '/') break;
     }
     await new Promise((r) => setTimeout(r, 500));
-    return { visible, path: location.pathname };
+    return { visible, indexAtLoad, path: location.pathname, hash: location.hash };
   })()`);
   check(`${label}: 文章页显示返回按钮`, r.visible === true);
   check(`${label}: 点击回首页`, r.path === '/', r.path);
+  // 直进时本页是该标签页的第一个条目（index 0），不存在来源页，
+  // 必须回首页且不残留锚点 —— 该判定不依赖可能被污染的历史栈
+  check(`${label}: 直进时无来源页可回（index=0）`, r.indexAtLoad === 0, `index=${r.indexAtLoad}`);
+  check(`${label}: 回首页后无锚点残留`, r.hash === '', r.hash || '(none)');
 }, '返回按钮-文章页直进');
+
+// 目录锚点跳转后，返回按钮必须回到「来源页」，而不是上一个锚点。
+// 回归背景：TOC 锚点会压入同页历史条目，若直接 history.back() 只会退一条，
+// 落在正文中间的锚点上 —— 本轮修复的正是这个行为。
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.documentElement.style.scrollBehavior = 'auto';
+    window.scrollTo(0, 900);
+    await sleep(250);
+    const yBefore = Math.round(window.scrollY);
+    // 客户端导航进文章页（走 View Transitions，与用户点击一致）
+    const link = [...document.querySelectorAll('a')].find(
+      (a) => a.getAttribute('href') === '/posts/writing-short/',
+    );
+    link.click();
+    for (let i = 0; i < 40; i++) {
+      await sleep(100);
+      if (location.pathname.startsWith('/posts/')) break;
+    }
+    await sleep(400);
+    const tocCount = document.querySelectorAll('.toc-list a').length;
+    // 连点两个目录锚点：每次都会压入一个同页历史条目
+    for (const k of [1, 2]) {
+      const a = document.querySelectorAll('.toc-list a')[k];
+      if (a) {
+        a.click();
+        await sleep(900);
+      }
+    }
+    const hashBefore = location.hash;
+    const idxBefore = window.history.state?.index ?? null;
+    document.getElementById('back-button').click();
+    for (let i = 0; i < 40; i++) {
+      await sleep(100);
+      if (location.pathname === '/') break;
+    }
+    await sleep(700);
+    return {
+      tocCount,
+      hashBefore,
+      idxBefore,
+      path: location.pathname,
+      hash: location.hash,
+      yBefore,
+      yAfter: Math.round(window.scrollY),
+    };
+  })()`);
+  check(
+    `${label}: 目录锚点可跳转`,
+    r.tocCount >= 2 && r.hashBefore.length > 1,
+    `${r.tocCount} 个锚点 · idx=${r.idxBefore}`,
+  );
+  check(
+    `${label}: 目录跳转后返回来源页（不停在上一锚点）`,
+    r.path === '/' && r.hash === '',
+    `${r.path}${r.hash}`,
+  );
+  check(
+    `${label}: 返回后来源页滚动位置恢复`,
+    Math.abs(r.yAfter - r.yBefore) <= 2,
+    `${r.yBefore} -> ${r.yAfter}`,
+  );
+}, '返回按钮-目录锚点后返回');
 
 // 标签页与搜索页
 await runPage(`${BASE}/tags/`, async (cdp, label) => {
