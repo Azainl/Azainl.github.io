@@ -25,19 +25,44 @@
 const MAX_DISPLAY_PX = 36 * 16; // 576px
 
 export default function markdownImageSizes() {
+  // 每篇正文只把**第一张**图设为即时加载（LCP 候选），其余保持懒加载。
+  //
+  // 计数必须按**文档**重置。曾经用工厂闭包里的计数器，结果整次构建只认第一篇
+  // ——「第一张图」变成"全站第一张图"（实测只有 cli-find-with-rg-fzf 生效）。
+  // Sätteri 的 `before` 钩子每次编译运行一次，正好是文档边界，故在那里清零。
+  let seenImages = 0;
+
   return {
     name: 'markdown-image-sizes',
+    before() {
+      seenImages = 0;
+    },
     element: {
       filter: ['img'],
       visit(node, ctx) {
         const props = node.properties ?? {};
+        const isFirst = seenImages === 0;
+        seenImages += 1;
+
         // 只补、不覆盖：作者显式写了 sizes 就尊重作者
-        if (props.sizes) return;
-        ctx.setProperty(
-          node,
-          'sizes',
-          `(min-width: ${MAX_DISPLAY_PX}px) ${MAX_DISPLAY_PX}px, 100vw`,
-        );
+        if (!props.sizes) {
+          ctx.setProperty(
+            node,
+            'sizes',
+            `(min-width: ${MAX_DISPLAY_PX}px) ${MAX_DISPLAY_PX}px, 100vw`,
+          );
+        }
+
+        // 首图：立即加载并抬高抓取优先级，让它能成为 LCP 元素。
+        //
+        // 必须用 Astro 自己的 `priority` 开关，不能直接写 loading/fetchpriority：
+        // 实测直接写会被图片管线忽略（基线里 loading 恒为 lazy）。
+        // astro/dist/assets/internal.js:
+        //   if (resolvedOptions.priority) { loading ??= 'eager'; decoding ??= 'sync'; fetchpriority ??= 'high' }
+        // width/height 与 srcset 由 image-marker 负责，不受影响，故 CLS 不回退。
+        if (isFirst) {
+          ctx.setProperty(node, 'priority', true);
+        }
       },
     },
   };
