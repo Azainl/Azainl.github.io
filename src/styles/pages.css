@@ -191,9 +191,13 @@ svg[data-icon] {
   margin-top: var(--space-1);
 }
 
+/* 搜索高亮：底与字都取令牌，且底色**不透明** ——
+   半透明底会随容器（--bg / --surface）合成出不同对比度，
+   在 --bg 上浅色仅 4.21:1（不达 AA）。改为不透明后与容器无关。
+   实测：浅色 5.37:1，深色 4.98:1。 */
 mark {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--mark-bg);
+  color: var(--mark-ink);
   border-radius: 2px;
   padding: 0 0.15em;
 }
