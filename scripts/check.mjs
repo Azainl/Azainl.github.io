@@ -984,6 +984,17 @@ await runPage(
     };
     // 逐帧扫描峰值位移：首帧动画尚未应用，读数恒为 0,0
     const peak = { rootOld: [0, 0], rootNew: [0, 0], titleOld: [0, 0], titleNew: [0, 0] };
+    // 共享元素 morph 的载体是 **group 层**，不是 old/new：
+    // group 负责把列表标题的位置/尺寸插值到文章标题。它必须真的在动，
+    // 否则标题只是原地闪现，"从哪来到哪去"就没了。
+    const groupStates = new Set();
+    let groupAnimName = null;
+    const groupBox = (tf, w, h) => {
+      const m = tf && tf !== 'none' ? tf.match(/matrix\(([^)]+)\)/) : null;
+      const p = m ? m[1].split(',').map(Number) : null;
+      const tr = p && p.length >= 6 ? p[4] + ',' + p[5] : tf;
+      return tr + '|' + w + 'x' + h;
+    };
     const keep = (slot, v) => {
       if (Math.abs(v[0]) > Math.abs(peak[slot][0])) peak[slot][0] = v[0];
       if (Math.abs(v[1]) > Math.abs(peak[slot][1])) peak[slot][1] = v[1];
@@ -996,6 +1007,9 @@ await runPage(
         if (tn) {
           keep('titleOld', xy(getComputedStyle(document.documentElement, '::view-transition-old(' + tn + ')').transform));
           keep('titleNew', xy(getComputedStyle(document.documentElement, '::view-transition-new(' + tn + ')').transform));
+          const gcs = getComputedStyle(document.documentElement, '::view-transition-group(' + tn + ')');
+          if (gcs.animationName && gcs.animationName !== 'none') groupAnimName = gcs.animationName;
+          groupStates.add(groupBox(gcs.transform, Math.round(parseFloat(gcs.width)), Math.round(parseFloat(gcs.height))));
         }
         headCounts.push(document.querySelectorAll('.site-header').length);
         if (!snap) {
@@ -1035,6 +1049,8 @@ await runPage(
       snap.rootNewPeak = peak.rootNew;
       snap.titleOldPeak = peak.titleOld;
       snap.titleNewPeak = peak.titleNew;
+      snap.groupAnimName = groupAnimName;
+      snap.groupStates = groupStates.size;
     }
     return snap;
   })()`;
@@ -1106,6 +1122,25 @@ await runPage(
     fwd
       ? `title old=${fwd.titleOldPeak} new=${fwd.titleNewPeak} | root old=${fwd.rootOldPeak} new=${fwd.rootNewPeak}`
       : '(null)',
+  );
+
+  // 判据 6：共享元素必须真的**飞**（group 层的 morph 不能被关掉）。
+  // 这是一条曾经失守的判据：T-19 给具名元素加 transition:animate="none"
+  // 省重复 CSS 时，Astro 连带输出了
+  //   @layer astro { ::view-transition-group(<name>) { animation: none } }
+  // 而 group 层正是"列表标题 → 文章标题"位置/尺寸插值的唯一载体。
+  // 被关掉后标题直接原地闪现（实测 group 状态数 22 → 2、动画名 → none），
+  // 而当时 205 条断言全绿 —— 因为没有任何一条读过 group 层。
+  // 采样的是**实际计算值**而不是"有没有那条声明"，所以不会随实现方式改变而失效。
+  check(
+    `${label}: 共享元素真的在飞（group 层有 morph 动画）`,
+    !!fwd && !!fwd.groupAnimName && !/^none$/i.test(fwd.groupAnimName),
+    fwd ? `group anim: ${fwd.groupAnimName || '(none)'}` : '(null)',
+  );
+  check(
+    `${label}: 共享元素逐帧插值（位置/尺寸在变化，非原地闪现）`,
+    !!fwd && fwd.groupStates >= 5,
+    fwd ? `group 状态数 ${fwd.groupStates}` : '(null)',
   );
 
   await evaluate(cdp, `new Promise((r) => setTimeout(r, 400))`);

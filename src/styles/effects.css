@@ -237,8 +237,25 @@ html[data-vt-back]::view-transition-new(*) {
   animation-timing-function: var(--vt-in-ease);
 }
 
-/* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ---- */
+/* ---- 共享元素（列表标题 → 文章标题）：更从容的飞行 ----
+   animation-name 必须显式 revert 到浏览器内建的 group 动画
+   （-ua-view-transition-group-anim-<name>），否则"从哪来到哪去"的
+   飞行动画会消失。
+
+   背景：T-19 给具名元素加了 transition:animate="none" 来省掉 Astro
+   逐元素生成的重复 CSS。但那会连带输出
+     @layer astro { ::view-transition-group(<name>) { animation: none } }
+   —— group 层正是共享元素 morph 的唯一载体，被关掉后标题不再从
+   列表位置飞到文章标题，而是直接闪现（A/B 实测：group 状态数 22 → 2，
+   动画名由 -ua-… 变为 none）。
+
+   为什么用 revert 而不是删掉 animate="none"：那条声明在 @layer astro 里，
+   本文件是无层级样式，按级联规则**无层级胜出**，故 revert 能把该属性
+   交还给用户代理的值（即内建 morph），同时保留 T-19 省下的 CSS。
+   注意 ::view-transition-group(site-header/footer) 的特异性更高，
+   其 animation: none 不受影响，页头页脚仍不参与位移。 */
 ::view-transition-group(*) {
+  animation-name: revert;
   animation-duration: var(--vt-in-dur);
   animation-timing-function: var(--vt-in-ease);
 }
