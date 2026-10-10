@@ -50,11 +50,13 @@
   color: var(--accent);
 }
 
-/* 移动端遮罩：点它收起抽屉，桌面端不渲染 */
+/* 移动端遮罩：点它收起抽屉，桌面端不渲染。
+   取主题令牌 --scrim：写死的半透明黑在深色底上会合成出与 --bg 完全相同的颜色，
+   遮罩等于不存在（实测深色 delta=0/0/0）。 */
 .toc-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(22, 20, 15, 0.42);
+  background: var(--scrim);
   z-index: 30;
 }
 
