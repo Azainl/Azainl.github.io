@@ -134,8 +134,20 @@
   transform: translateY(1px);
 }
 
-/* 页头搜索框：默认只是一条下划线（报刊搜索栏的收敛写法），
-   聚焦时才浮出纸面成为完整输入框。 */
+/* 页头搜索框：**打开前后必须是同一支笔画的同一个盒子**。
+   ------------------------------------------------------------
+   这里曾写成「默认透明 + 仅下划线，聚焦才浮出纸面」，实测两种状态的
+   computed 颜色并不一致：
+     默认  background: rgba(0, 0, 0, 0)    边框仅下边 1px
+     聚焦  background: rgb(251, 248, 241)  四边 1px 朱砂 + 光晕
+   于是输入框在"一段朴素文字"与"一个白底红框的盒子"之间跳变 ——
+   点开它，盒子像凭空长出来一样。
+
+   现以**打开后的样子**作为静态基准：纸面底色 + 四边细线始终存在，
+   聚焦只把线色换成朱砂并加光晕（那才是"焦点在哪"的语义反馈，
+   而不是盒子存在与否的开关）。宽度也固定下来，不再聚焦时抽长。
+   这与搜索页的 .search-input 完全一致 —— 两处本就是同一个控件，
+   此前页头这一支是唯一的例外。 */
 .header-search {
   position: relative;
 }
@@ -151,17 +163,16 @@
 }
 
 .header-search-input {
-  width: 180px;
+  /* 固定宽度：聚焦不再抽长，避免点开时整块页头跟着位移 */
+  width: 220px;
   padding: 0.35rem 0.6rem 0.35rem 1.9rem;
   font-family: inherit;
   font-size: var(--text-ui);
   color: var(--ink);
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease,
-    background-color 0.15s ease, width 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .header-search-input::placeholder {
@@ -170,8 +181,7 @@
 
 .header-search-input:focus {
   outline: none;
-  width: 240px;
-  background: var(--surface);
+  /* 底色不参与变化：打开前后同为 --surface，只有线色与光晕在动 */
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }

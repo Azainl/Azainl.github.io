@@ -1205,6 +1205,142 @@ await runPage(
   '页头可读性',
 );
 
+// ---- 页头搜索框：打开前后必须是同一个盒子 ----
+// 起因：默认态写成「透明底 + 仅下边线」，聚焦态才变成「纸面底 + 四边线」。
+// 实测两者的 computed 颜色并不一致：
+//   默认 background: rgba(0, 0, 0, 0)      边框仅下边 1px
+//   聚焦 background: rgb(251, 248, 241)    四边 1px + 朱砂 + 光晕
+// 于是点开搜索框时，盒子像凭空长出来一样 —— 用户报的正是"打开前后颜色不一致"。
+//
+// 判据：底色、四边线宽、几何尺寸在开/关两态**必须完全相同**；
+// 允许变化的只有线色与光晕（那表达"焦点在哪"，不是盒子存在与否）。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    const readState = () => `(() => {
+      const i = document.querySelector('.header-search-input');
+      if (!i) return { error: 'no input' };
+      const cs = getComputedStyle(i);
+      const r = i.getBoundingClientRect();
+      return {
+        bg: cs.backgroundColor,
+        topW: cs.borderTopWidth,
+        botW: cs.borderBottomWidth,
+        leftW: cs.borderLeftWidth,
+        rightW: cs.borderRightWidth,
+        topColor: cs.borderTopColor,
+        botColor: cs.borderBottomColor,
+        leftColor: cs.borderLeftColor,
+        rightColor: cs.borderRightColor,
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      };
+    })()`;
+    const closed = await evaluate(cdp, readState());
+    await evaluate(cdp, "document.querySelector('.header-search-input').focus(); true");
+    await sleep(500);
+    const focused = await evaluate(cdp, readState());
+    await evaluate(cdp, "document.querySelector('.header-search-input').blur(); true");
+    await sleep(400);
+
+    const ok = closed && focused && !closed.error && !focused.error;
+    check(
+      `${label}: 搜索框底色打开前后一致`,
+      ok && closed.bg === focused.bg,
+      ok ? `closed=${closed.bg} focused=${focused.bg}` : '(null)',
+    );
+    check(
+      `${label}: 搜索框四边线打开前后一致`,
+      ok &&
+        closed.topW === focused.topW &&
+        closed.botW === focused.botW &&
+        closed.leftW === focused.leftW &&
+        closed.rightW === focused.rightW &&
+        parseFloat(closed.topW) > 0 &&
+        parseFloat(closed.leftW) > 0,
+      ok
+        ? `closed=${closed.topW}/${closed.botW}/${closed.leftW}/${closed.rightW} focused=${focused.topW}/${focused.botW}/${focused.leftW}/${focused.rightW}`
+        : '(null)',
+    );
+    // 尺寸不能变：否则点开时整个页头会跟着抽动
+    check(
+      `${label}: 搜索框尺寸打开前后一致（点开不抽动）`,
+      ok && closed.width === focused.width && closed.height === focused.height,
+      ok ? `closed=${closed.width}x${closed.height} focused=${focused.width}x${focused.height}` : '(null)',
+    );
+    // 真正的判据：**默认态就四边可见**。
+    // 只查线宽会漏 —— 旧写法是 `border: 1px solid transparent`，
+    // 四边宽度本来就是 1px，但默认态颜色是透明的，盒子并不存在。
+    // 所以必须查"默认态的四边线是否真的可见（alpha > 0）"。
+    const visible = (c) => {
+      if (!c || typeof c !== 'string') return false;
+      if (/^transparent$/.test(c)) return false;
+      const slash = c.match(/\/\s*([\d.]+)\s*\)/);
+      if (slash) return parseFloat(slash[1]) > 0;
+      const rgba = c.match(/^rgba\([^)]*?,\s*([\d.]+)\)$/);
+      if (rgba) return parseFloat(rgba[1]) > 0;
+      return /^rgb\(/.test(c) || /^color\(/.test(c);
+    };
+    check(
+      `${label}: 默认态四边线可见（盒子一进页面就存在）`,
+      ok && visible(closed.topColor) && visible(closed.botColor) &&
+        visible(closed.leftColor) && visible(closed.rightColor),
+      ok
+        ? `top=${closed.topColor} bottom=${closed.botColor} left=${closed.leftColor} right=${closed.rightColor}`
+        : '(null)',
+    );
+    // 反向确认"聚焦确实有反馈"：线色要变，否则这条断言会奖励一个死掉的焦点态
+    check(
+      `${label}: 聚焦仍有可见反馈（线色变化）`,
+      ok && closed.topColor !== focused.topColor,
+      ok ? `closed=${closed.topColor} focused=${focused.topColor}` : '(null)',
+    );
+  },
+  '搜索框开合一致',
+);
+
+// ---- 关于页：题头与正文必须共用同一条左边缘 ----
+// 起因：about.astro 把两个**各自居中**的盒子上下叠放：
+//   .page-head  max-width: 58rem（--container-wide）
+//   .prose      max-width: 34rem（--measure）
+// 二者都 margin:0 auto，于是各自在视口里居中。实测 1440px 下
+// 标题左边缘 271px、正文左边缘 463px —— 错位 192px，看着像两段无关的内容。
+await runPage(
+  `${BASE}/about/`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const h = document.querySelector('.page-head h1');
+        const p = document.querySelector('.prose > p');
+        if (!h || !p) return { error: 'missing', hasH: !!h, hasP: !!p };
+        const rh = h.getBoundingClientRect();
+        const rp = p.getBoundingClientRect();
+        return {
+          delta: +(rp.left - rh.left).toFixed(1),
+          hLeft: +rh.left.toFixed(1),
+          pLeft: +rp.left.toFixed(1),
+          hRight: +rh.right.toFixed(1),
+          pRight: +rp.right.toFixed(1),
+          overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 标题与正文左边缘对齐`,
+      !!r && !r.error && Math.abs(r.delta) <= 2,
+      r && !r.error ? `h1.left=${r.hLeft} p.left=${r.pLeft} delta=${r.delta}` : JSON.stringify(r),
+    );
+    check(
+      `${label}: 标题与正文右边缘对齐`,
+      !!r && !r.error && Math.abs(r.hRight - r.pRight) <= 2,
+      r && !r.error ? `h1.right=${r.hRight} p.right=${r.pRight}` : '(null)',
+    );
+    check(`${label}: 无横向溢出`, !!r && !r.error && !r.overflow, String(r && r.overflow));
+  },
+  '关于页版式',
+);
+
 // ---- 首页列表：标签在「上方文字」与「下方分割线」之间居中 ----
 // 起因：标签是 <a> 的兄弟节点，上间距 = <a> 的 24px 下内边距 + 标签 8px 外边距
 // = 32px；而下间距只由标签自己的 margin-bottom 决定，原为 0。

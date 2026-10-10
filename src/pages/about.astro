@@ -8,32 +8,37 @@ import { url } from '../utils/url';
   title={`关于 · ${SITE.name}`}
   description="关于这个博客与它的作者。"
 >
-  <div class="page-head reveal">
-    <h1>关于</h1>
-    <p>关于这个博客，以及写下这些文字的人。</p>
-  </div>
+  {/* 题头与正文同处一条阅读列，共用同一条左边缘（.reading，见 pages.css）。
+      原先题头用 .container（58rem）、正文用 .prose（34rem），
+      两个盒子都 margin:0 auto 各自居中，实测错位 192px。 */}
+  <div class="reading">
+    <div class="page-head reveal">
+      <h1>关于</h1>
+      <p>关于这个博客，以及写下这些文字的人。</p>
+    </div>
 
-  <div class="container prose reveal" style="padding-bottom: 5rem; --reveal-delay: 80ms">
-    <p>
-      你好，我是{SITE.author}。这里是我的个人博客，用来放一些
-      写代码、读书和生活时冒出来的想法。
-    </p>
+    <div class="prose reveal" style="--reveal-delay: 80ms">
+      <p>
+        你好，我是{SITE.author}。这里是我的个人博客，用来放一些
+        写代码、读书和生活时冒出来的想法。
+      </p>
 
-    <p>
-      博客于 2026 年夏天上线。技术选型、搭建过程都记录在
-      <a href={url('/posts/blog-build-notes/')}>这篇文章</a>里。
-      本站没有评论系统、没有广告，也没有统计脚本，只有按时间排列的文章。
-      如果你读到了什么，欢迎写信给我。
-    </p>
+      <p>
+        博客于 2026 年夏天上线。技术选型、搭建过程都记录在
+        <a href={url('/posts/blog-build-notes/')}>这篇文章</a>里。
+        本站没有评论系统、没有广告，也没有统计脚本，只有按时间排列的文章。
+        如果你读到了什么，欢迎写信给我。
+      </p>
 
-    <h2>联系我</h2>
-    <p>
-      邮件：<code>{SITE.email}</code>
-    </p>
+      <h2>联系我</h2>
+      <p>
+        邮件：<code>{SITE.email}</code>
+      </p>
 
-    <h2>订阅</h2>
-    <p>
-      可以订阅 <a href={url('/rss.xml')}>RSS</a>，有新文章时会第一时间同步。
-    </p>
+      <h2>订阅</h2>
+      <p>
+        可以订阅 <a href={url('/rss.xml')}>RSS</a>，有新文章时会第一时间同步。
+      </p>
+    </div>
   </div>
 </BaseLayout>
