@@ -107,6 +107,17 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
           (pref === 'system' &&
             window.matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) root.classList.add('dark');
+
+        // 兜底：`.js .reveal` 把未渐显的内容设为 opacity:0，而真正让它们显示的是
+        // reveal 模块——那是外部 JS，弱网或脚本被拦截时可能永远加载不到，正文
+        // 会因此**永久空白**。这里在 DOMContentLoaded 时确认模块是否已接管
+        // （reveal.ts 在模块求值时就写入 data-reveal-ready），未接管就撤掉
+        // `js` 标记，内容随即按"无 JS"的样式直接可见。
+        // DOMContentLoaded 必定晚于模块脚本的执行或失败，故这个判据是确定的；
+        // 用超时猜时机会在慢网络下误判。
+        document.addEventListener('DOMContentLoaded', () => {
+          if (!root.dataset.revealReady) root.classList.remove('js');
+        });
       })();
     </script>
     {/* 各页面可选的 JSON-LD 结构化数据（文章页会塞 BlogPosting） */}
