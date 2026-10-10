@@ -48,6 +48,10 @@ const links = [
           aria-haspopup="listbox"
           aria-controls="search-popover-list"
         />
+        {/* 搜索状态播报区。必须放在 .search-popover **之外**：弹层收起时是
+            display:none，live region 在其中不会进入可访问性树，也就不会播报。
+            .sr-only 保证它不可见但不脱离可访问性树。 */}
+        <p class="sr-only" id="search-announce" aria-live="polite" aria-atomic="true"></p>
         <div class="search-popover" id="search-popover">
           <p class="search-popover-empty" hidden>没有找到相关文章</p>
           <ul
@@ -85,6 +89,7 @@ const links = [
 
 <script>
   import {
+    announce,
     buildIndex,
     searchIndex,
     highlight,
@@ -201,7 +206,18 @@ const links = [
     const moreEl = popover.querySelector(
       '.search-popover-more',
     ) as HTMLAnchorElement;
+    const announceEl = document.getElementById('search-announce');
     let activeIndex = -1;
+
+    /** 播报结果条数；无结果时也要出声，否则读屏用户不知道发生了什么 */
+    function announceResults(count: number, query: string): void {
+      announce(
+        announceEl,
+        count === 0
+          ? `没有找到与"${query}"相关的文章`
+          : `找到 ${count} 篇文章`,
+      );
+    }
 
     function syncActiveDescendant() {
       const items = listEl.querySelectorAll('.search-popover-item');
@@ -234,9 +250,11 @@ const links = [
       if (items.length === 0) {
         emptyEl.hidden = false;
         listEl.hidden = true;
+        announceResults(0, query);
       } else {
         emptyEl.hidden = true;
         listEl.hidden = false;
+        announceResults(items.length, query);
         for (const [i, { post }] of items.slice(0, 6).entries()) {
           const li = document.createElement('li');
           li.setAttribute('role', 'presentation');
@@ -279,6 +297,8 @@ const links = [
       const q = input.value.trim();
       if (!q) {
         closePopover();
+        // 清空后播报状态复位，避免读屏用户仍以为停留在上一次的结果数上
+        announce(announceEl, '');
         return;
       }
       timer = window.setTimeout(() => void render(q), 120);

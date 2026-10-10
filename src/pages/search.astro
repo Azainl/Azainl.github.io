@@ -30,6 +30,9 @@ import { Icon } from 'astro-icon/components';
       </button>
     </div>
 
+    {/* 结果播报区：始终留在可访问性树中（.sr-only），因此不能用 hidden 切换。
+        与页头下拉共用 announce() —— 两处都有播报，行为一致。 */}
+    <p class="sr-only" id="search-announce" aria-live="polite" aria-atomic="true"></p>
     <p id="search-meta" class="search-meta" hidden></p>
     <div id="search-loading" class="search-status">
       <p>正在载入文章索引……</p>
@@ -49,6 +52,7 @@ import { Icon } from 'astro-icon/components';
 
 <script>
   import {
+    announce,
     buildIndex,
     searchIndex,
     highlight,
@@ -76,6 +80,7 @@ import { Icon } from 'astro-icon/components';
     const loading = document.getElementById('search-loading') as HTMLElement;
     const errorBox = document.getElementById('search-error') as HTMLElement;
     const results = document.getElementById('search-results') as HTMLOListElement;
+    const announceEl = document.getElementById('search-announce');
 
     function render(items: ReturnType<typeof searchIndex>, query: string) {
       results.replaceChildren();
@@ -147,6 +152,7 @@ import { Icon } from 'astro-icon/components';
         results.hidden = true;
         none.hidden = true;
         empty.hidden = false;
+        announce(announceEl, '');
         return;
       }
       const items = searchIndex(index, q);
@@ -155,6 +161,8 @@ import { Icon } from 'astro-icon/components';
         meta.hidden = true;
         results.hidden = true;
         none.hidden = false;
+        // 无结果也要播报，否则读屏用户不知道检索已经完成
+        announce(announceEl, `没有找到与"${q}"相关的文章`);
         return;
       }
       none.hidden = true;
@@ -162,6 +170,7 @@ import { Icon } from 'astro-icon/components';
       meta.textContent = `找到 ${items.length} 篇文章`;
       render(items, q);
       results.hidden = false;
+      announce(announceEl, `找到 ${items.length} 篇文章`);
     }
 
     input.addEventListener('input', () => {
@@ -197,6 +206,7 @@ import { Icon } from 'astro-icon/components';
         // 索引拉取失败（离线 / 网络问题）时给出明确反馈，而不是一直卡在「正在载入」
         loading.hidden = true;
         errorBox.hidden = false;
+        announce(announceEl, '文章索引载入失败，请刷新页面重试');
       });
   }
 

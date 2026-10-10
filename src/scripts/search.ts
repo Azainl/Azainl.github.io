@@ -1,5 +1,20 @@
 /** 全站搜索共享逻辑：页头搜索框与 /search/ 页面共用 */
 
+/**
+ * 向屏幕阅读器播报一条搜索状态（不移动焦点、不改变布局）。
+ *
+ * 必须先清空再写入：live region 只有在**文本发生变化**时才播报，
+ * 连续两次相同消息（例如重复搜索同一关键词）否则不会出声。
+ * 放在 rAF 里是为了让清空与写入成为两次独立的 DOM 变更。
+ */
+export function announce(node: HTMLElement | null, message: string): void {
+  if (!node) return;
+  node.textContent = '';
+  requestAnimationFrame(() => {
+    node.textContent = message;
+  });
+}
+
 export interface PostIndex {
   slug: string;
   title: string;
