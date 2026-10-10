@@ -113,7 +113,9 @@ const jsonLd = {
           )
         }
       </p>
-      <h1 class="post-title" transition:name={vtName(post.id)}>
+      {/* 同列表标题：name 必需，但 Astro 生成的动画块被 effects.css 的通配规则覆盖，
+          用 animate="none" 避免为每个具名元素输出约 2.4 KB 的无用 CSS（T-19） */}
+      <h1 class="post-title" transition:name={vtName(post.id)} transition:animate="none">
         {post.data.title}
       </h1>
       <p class="post-lead">{post.data.description}</p>

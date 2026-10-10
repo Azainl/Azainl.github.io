@@ -72,7 +72,7 @@ pagePosts.forEach((post, i) => {
                   {featuredSlugs.has(post.id) && <span class="post-pick">推荐</span>}
                 </div>
                 <div>
-                  <TitleTag class="post-row-title" transition:name={vtName(post.id)}>
+                  <TitleTag class="post-row-title" transition:name={vtName(post.id)} transition:animate="none">
                     {post.data.title}
                   </TitleTag>
                   <p>{post.data.description}</p>

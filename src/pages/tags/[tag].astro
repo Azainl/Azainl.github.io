@@ -84,7 +84,13 @@ const jsonLd = {
               <div>
                 {/* h2 而非 h3：本页 h1 就是标签名，文章是它下面的一级。
                     原来写 h3 会形成 h1→h3 的跳级。 */}
-                <h2 class="post-row-title" transition:name={vtName(post.id)}>
+                {/* transition:animate="none"：Astro 会为**每个**具名元素生成一整块
+                    动画 CSS（约 2.4 KB，其中 keyframe 部分逐字相同，只有名字不同）。
+                    实测该块在真实过渡中并不生效——具名层的动画由 effects.css 的
+                    ::view-transition-old(*) 通配规则接管（实测跑的是 vt-out-forward，
+                    不是 Astro 内建的 astroFadeOut）。故显式声明"不需要 Astro 生成动画"，
+                    保留 name（层级必需）但去掉那块无用 CSS。 */}
+                <h2 class="post-row-title" transition:name={vtName(post.id)} transition:animate="none">
                   {post.data.title}
                 </h2>
                 <p>{post.data.description}</p>
