@@ -90,8 +90,12 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
-    <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
+    {/* theme-color 必须与 --bg 同源：此前写死 #f7f7f4/#131315，
+        而 --bg 早已换成暖纸 #f2ede1 / 暖黑 #16140f —— 移动端地址栏
+        与页面底色因此对不上（地址栏偏冷白）。这里直接引用同一个令牌，
+        并在下面用 JS 处理"用户三态偏好"（media 只认系统偏好）。 */}
+    <meta name="theme-color" content="#f2ede1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16140f" media="(prefers-color-scheme: dark)" />
     <ClientRouter />
     <script is:inline>
       // 首屏同步执行，避免主题闪烁（FOUC）。

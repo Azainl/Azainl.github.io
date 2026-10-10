@@ -153,12 +153,36 @@ const links = [
     toggle.setAttribute('title', `主题：${label}`);
   }
 
+  /**
+   * 让 theme-color 与实际底色一致。
+   *
+   * 两处 meta 的 media 分支只认**系统**偏好；本站的偏好是 light/dark/system
+   * 三态，用户显式选过之后可能与系统相反，那时 media 分支给出的就是错的颜色。
+   * 这里按实际渲染出的 --bg 回写两处 meta —— 直接取值而不是再抄一份十六进制，
+   * 保证与令牌同源、不会再次漂移。
+   */
+  function syncThemeColor(): void {
+    // 必须读 **--bg 令牌**，不能读 body 的 computed backgroundColor：
+    // body 上有 0.25s 的 background-color 过渡，切换主题后立刻取到的是
+    // 过渡中的中间色，而过一会儿又不会再有第二次同步——实测 meta 会因此
+    // 停在旧色（切到深色后 meta 仍是浅色）。自定义属性不参与过渡，
+    // 取到的就是当前主题的真实底色，也保证与令牌同源。
+    const bg = getComputedStyle(document.documentElement)
+      .getPropertyValue('--bg')
+      .trim();
+    if (!bg) return;
+    document
+      .querySelectorAll('meta[name="theme-color"]')
+      .forEach((m) => m.setAttribute('content', bg));
+  }
+
   function applyTheme(pref: ThemePref): void {
     const root = document.documentElement;
     root.dataset.theme = pref;
     localStorage.setItem('theme', pref);
     root.classList.toggle('dark', isDark(pref));
     syncToggleLabel(pref);
+    syncThemeColor();
   }
 
   // 系统主题监听只需要挂一次：MediaQueryList 不随页面切换重建，
@@ -171,8 +195,10 @@ const links = [
     if (!toggle || toggle.dataset.inited) return;
     toggle.dataset.inited = 'true';
 
-    // 进入页面时先把无障碍标签同步成真实偏好
+    // 进入页面时先把无障碍标签与 theme-color 同步成真实偏好
+    // （显式偏好可能与系统相反，此时 media 分支给的颜色是错的）
     syncToggleLabel(currentPref());
+    syncThemeColor();
 
     toggle.addEventListener('click', () => {
       const next =
