@@ -287,8 +287,9 @@
   }
   .header-search-link {
     display: inline-flex;
-    width: 2.25rem;
-    height: 2.25rem;
+    /* 同 theme-toggle：命中区提到 44x44（窄屏才显示此按钮） */
+    width: 2.75rem;
+    height: 2.75rem;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--line);
@@ -315,8 +316,11 @@
 }
 
 .theme-toggle {
-  width: 2.25rem;
-  height: 2.25rem;
+  /* 命中区 44x44（WCAG 2.5.8 目标尺寸下限），此前 36x36。
+     页头高度由 --header-h 固定（3.75rem=60px），44px 仍放得下，
+     故不撑高页头；图标视觉尺寸由 [data-icon] 单独控制，不受影响。 */
+  width: 2.75rem;
+  height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
