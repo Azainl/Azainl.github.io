@@ -4,7 +4,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { SITE, PER_PAGE } from '../../consts';
 import { getPublishedPosts, getFeaturedPosts } from '../../utils/posts';
 import Archive from '../../components/Archive.astro';
-import { url } from '../../utils/url';
+import { breadcrumbList, collectionPage } from '../../utils/jsonld';
 
 export const getStaticPaths = (async () => {
   const posts = await getPublishedPosts();
@@ -31,29 +31,19 @@ const featured = getFeaturedPosts(posts, 3).map((post) => post.id);
 const perPage = PER_PAGE;
 const start = (current - 1) * perPage;
 const pagePosts = posts.slice(start, start + perPage);
-const pageUrl = new URL(url(`/page/${current}/`), Astro.site).href;
 const jsonLd = {
   '@context': 'https://schema.org',
-  '@type': 'CollectionPage',
-  name: `文章列表 · 第 ${current} 页 · ${SITE.name}`,
-  description: '全部文章，按时间倒序排列。',
-  url: pageUrl,
-  inLanguage: SITE.locale,
-  isPartOf: {
-    '@type': 'WebSite',
-    name: SITE.title,
-    url: new URL('/', Astro.site).href,
-  },
-  mainEntity: {
-    '@type': 'ItemList',
-    numberOfItems: pagePosts.length,
-    itemListElement: pagePosts.map((post, i) => ({
-      '@type': 'ListItem',
-      position: i + 1,
-      url: new URL(url(`/posts/${post.id}/`), Astro.site).href,
-      name: post.data.title,
-    })),
-  },
+  '@graph': [
+    collectionPage({
+      name: `文章列表 · 第 ${current} 页 · ${SITE.name}`,
+      description: '全部文章，按时间倒序排列。',
+      path: `/page/${current}/`,
+      posts: pagePosts,
+      site: Astro.site,
+    }),
+    // 末级即当前页，按惯例不带 item（与文章页、标签页保持一致）
+    breadcrumbList([{ path: '/', name: '首页' }, { name: `第 ${current} 页` }], Astro.site),
+  ],
 };
 ---
 

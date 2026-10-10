@@ -8,6 +8,7 @@ import { readingTime } from '../utils/readingTime';
 import { vtName } from '../utils/vtName';
 import { tagSlug } from '../data/tags';
 import { url } from '../utils/url';
+import { breadcrumbList } from '../utils/jsonld';
 import { lastModified, ogImagePath } from '../utils/posts';
 // Astro 7：条目方法 post.render() 换成了具名导出 render(post)
 import { render } from 'astro:content';
@@ -35,16 +36,38 @@ const isRevised = modified > post.data.date;
 const canonical = new URL(url(`/posts/${post.id}/`), Astro.site).href;
 const jsonLd = {
   '@context': 'https://schema.org',
-  '@type': 'BlogPosting',
-  headline: post.data.title,
-  description: post.data.description,
-  datePublished: post.data.date.toISOString(),
-  dateModified: modified.toISOString(),
-  inLanguage: 'zh-CN',
-  keywords: post.data.tags.join(', '),
-  author: { '@type': 'Person', name: SITE.author },
-  publisher: { '@type': 'Organization', name: SITE.name },
-  mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+  '@graph': [
+    {
+      '@type': 'BlogPosting',
+      headline: post.data.title,
+      description: post.data.description,
+      datePublished: post.data.date.toISOString(),
+      dateModified: modified.toISOString(),
+      inLanguage: 'zh-CN',
+      keywords: post.data.tags.join(', '),
+      author: { '@type': 'Person', name: SITE.author },
+      publisher: { '@type': 'Organization', name: SITE.name },
+      mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+    },
+    // 面包屑：首页 → 首个标签 → 本文。
+    // 只取**一个**标签：文章可能属于多个标签，全列会让层级变成树而非链，
+    // 而 schema.org 的 BreadcrumbList 表达的是单条路径。
+    breadcrumbList(
+      [
+        { path: '/', name: '首页' },
+        ...(post.data.tags.length
+          ? [
+              {
+                path: `/tags/${tagSlug(post.data.tags[0])}/`,
+                name: post.data.tags[0],
+              },
+            ]
+          : []),
+        { name: post.data.title },
+      ],
+      Astro.site,
+    ),
+  ],
 };
 ---
 

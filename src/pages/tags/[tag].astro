@@ -7,6 +7,7 @@ import { tagDescription, tagSlug } from '../../data/tags';
 import { vtName } from '../../utils/vtName';
 import { url } from '../../utils/url';
 import { getPublishedPosts } from '../../utils/posts';
+import { breadcrumbList, collectionPage } from '../../utils/jsonld';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
@@ -26,29 +27,28 @@ const posts = (await getPublishedPosts()).filter((post) =>
 // 标签页此前没有任何结构化数据（全站 22 个标签页均无）。
 // 这里只声明**页面上真实存在的**聚合语义：这是一个汇集页，
 // 主实体是它列出的那组文章 —— 不添加页面没有的字段。
-const tagUrl = new URL(url(`/tags/${tagSlug(name)}/`), Astro.site).href;
+// 构造器见 utils/jsonld.ts（与分页页、面包屑共用同一份口径）。
+const tagPath = `/tags/${tagSlug(name)}/`;
 const jsonLd = {
   '@context': 'https://schema.org',
-  '@type': 'CollectionPage',
-  name: `#${name} · ${SITE.name}`,
-  description: `标签「${name}」下的全部文章。`,
-  url: tagUrl,
-  inLanguage: SITE.locale,
-  isPartOf: {
-    '@type': 'WebSite',
-    name: SITE.title,
-    url: new URL('/', Astro.site).href,
-  },
-  mainEntity: {
-    '@type': 'ItemList',
-    numberOfItems: posts.length,
-    itemListElement: posts.map((post, i) => ({
-      '@type': 'ListItem',
-      position: i + 1,
-      url: new URL(url(`/posts/${post.id}/`), Astro.site).href,
-      name: post.data.title,
-    })),
-  },
+  '@graph': [
+    collectionPage({
+      name: `#${name} · ${SITE.name}`,
+      description: `标签「${name}」下的全部文章。`,
+      path: tagPath,
+      posts,
+      site: Astro.site,
+    }),
+    // 面包屑：首页 → 全部标签 → 当前标签（不含页面上不存在的层级）
+    breadcrumbList(
+      [
+        { path: '/', name: '首页' },
+        { path: '/tags/', name: '全部标签' },
+        { name: `#${name}` },
+      ],
+      Astro.site,
+    ),
+  ],
 };
 ---
 
