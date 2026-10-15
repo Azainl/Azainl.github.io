@@ -1,8 +1,8 @@
 name: CI（质量检查）
 
-# 刻意与 deploy.yml 分开：这只是一个「体检」工作流，失败不会挡住发布。
-# 观察一段时间稳定后，如果希望它成为发布门禁，再把这里的步骤并入 deploy.yml
-# 的 build job（放在 npm run build 之前）即可。
+# 本工作流是发布门禁：deploy.yml 由这里的成功结果触发（workflow_run + branches: [main]）。
+# 若此处的类型检查 / 构建 / 浏览器回归任一失败，Pages 不会被部署，坏版本不会上线。
+# 应急手动发布走 deploy.yml 的 workflow_dispatch，可绕过本门禁。
 on:
   push:
     branches: [main]
@@ -20,8 +20,8 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -34,6 +34,12 @@ jobs:
 
       - name: 类型检查
         run: npm run typecheck
+
+      # 技能目录不在版本库内（见 link-skills.mjs 说明）。CI / 干净克隆下
+      # 工作区技能目录不存在，这一步会打印 SKIP 并以 0 退出；在有技能的开发机上
+      # 才会真正校验链接有效性。放在构建之前，尽早暴露链接损坏。
+      - name: 校验技能链接（无技能目录时跳过）
+        run: npm run check:skills
 
       - name: 构建
         run: npm run build
@@ -59,7 +65,7 @@ jobs:
 
       - name: 失败时保留预览日志
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: preview-log
           path: preview.log

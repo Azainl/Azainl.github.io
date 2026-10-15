@@ -18,3 +18,7 @@ reasonix.toml
 # git 会**跟随** junction 把 15 个技能的全部文件复制进仓库（实测 git add -n
 # 列出了每一个 SKILL.md），既臃肿又会在别的机器上变成失效的普通文件。
 .agents/skills/
+
+# 历史打包产物（约 7.6 MB）与临时预览日志：本地产物，不进版本库
+releases/
+preview*.log

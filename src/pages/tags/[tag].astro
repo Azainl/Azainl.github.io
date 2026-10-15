@@ -7,7 +7,7 @@ import { tagDescription, tagSlug } from '../../data/tags';
 import { vtName } from '../../utils/vtName';
 import { url } from '../../utils/url';
 import { getPublishedPosts } from '../../utils/posts';
-import { breadcrumbList, collectionPage } from '../../utils/jsonld';
+import { breadcrumbList, collectionPage, safeJsonLd } from '../../utils/jsonld';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
@@ -56,7 +56,7 @@ const jsonLd = {
   title={`#${name} · ${SITE.name}`}
   description={`标签「${name}」下的全部文章。`}
 >
-  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   <div class="page-head reveal">
     <button
       class="post-back"

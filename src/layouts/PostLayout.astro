@@ -8,7 +8,7 @@ import { readingTime } from '../utils/readingTime';
 import { vtName } from '../utils/vtName';
 import { tagSlug } from '../data/tags';
 import { url } from '../utils/url';
-import { breadcrumbList } from '../utils/jsonld';
+import { breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { lastModified, ogImagePath } from '../utils/posts';
 // Astro 7：条目方法 post.render() 换成了具名导出 render(post)
 import { render } from 'astro:content';
@@ -81,7 +81,7 @@ const jsonLd = {
   publishedTime={post.data.date.toISOString()}
   modifiedTime={modified.toISOString()}
 >
-  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   <article class="post">
     <header class="post-header reveal">
       <button

@@ -1,0 +1,25 @@
+# 依赖与工作流的自动更新提议。
+# 只开 PR、不自动合并——这个站点的依赖面很窄（Astro + 两个字体包），
+# 人工过一眼的成本远低于自动合并带来的风险。
+version: 2
+updates:
+  # 站点依赖：每周一次，避免频繁打扰
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Astro 全家桶常需同步升级，合成一个 PR 便于一起验证
+      astro:
+        patterns:
+          - astro
+          - "@astrojs/*"
+
+  # GitHub Actions：固定 tag 已按 SHA 锁定（见 workflow 注释），
+  # 这里负责在有新版本时提醒我们更新那些 SHA
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

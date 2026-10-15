@@ -6,6 +6,7 @@ import Archive from '../components/Archive.astro';
 import { url } from '../utils/url';
 import { tagSlug, usedTagGroups } from '../data/tags';
 import { formatDate } from '../utils/formatDate';
+import { safeJsonLd } from '../utils/jsonld';
 
 const posts = await getPublishedPosts();
 
@@ -66,7 +67,7 @@ const jsonLd = {
 ---
 
 <BaseLayout title={SITE.title} description={SITE.description}>
-  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   <header class="masthead">
     <h1 class="reveal">写代码，读书，过日子。</h1>
     <p class="reveal" style="--reveal-delay: 60ms">

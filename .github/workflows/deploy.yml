@@ -1,7 +1,14 @@
 name: Deploy to GitHub Pages
 
+# B1（方案 A）：发布以 CI 为门禁。
+# 本工作流不再直接由 push 触发，而是等「CI（质量检查）」在 main 上跑完后才启动：
+#   - CI 成功 → 构建并部署（部署的正是 CI 验证过的那个 commit）
+#   - CI 失败 / 取消 → 本工作流不启动，坏版本不会上线
+# 手动发布（workflow_dispatch）不受门禁限制，保留应急出口。
 on:
-  push:
+  workflow_run:
+    workflows: ["CI（质量检查）"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -16,10 +23,16 @@ concurrency:
 
 jobs:
   build:
+    # 门禁：只有 CI 成功才构建；手动触发时无条件放行。
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # workflow_run 缺省会检出默认分支的最新提交；显式取 CI 所验证的那个 SHA，
+          # 确保部署的与通过检查的是同一份代码（手动触发时回落到 github.sha）。
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -27,12 +40,11 @@ jobs:
       # .astro/ 不进版本库，先同步内容集合类型，否则类型检查会找不到 astro:content
       - name: 同步内容集合类型
         run: npm run sync
-      # 质量门禁：astro build 不检查类型，P0 级的静默错误（如属性插值失效）
-      # 只能靠这一步拦住
+      # 纵深防御：CI 已跑过 typecheck，这里再跑一次，保证「被部署的这份」自身类型干净。
       - name: 类型检查
         run: npm run typecheck
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: dist
 
@@ -44,4 +56,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

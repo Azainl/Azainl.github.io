@@ -4,7 +4,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { SITE, PER_PAGE } from '../../consts';
 import { getPublishedPosts, getFeaturedPosts } from '../../utils/posts';
 import Archive from '../../components/Archive.astro';
-import { breadcrumbList, collectionPage } from '../../utils/jsonld';
+import { breadcrumbList, collectionPage, safeJsonLd } from '../../utils/jsonld';
 
 export const getStaticPaths = (async () => {
   const posts = await getPublishedPosts();
@@ -51,7 +51,7 @@ const jsonLd = {
   title={`文章列表 · 第 ${current} 页 · ${SITE.name}`}
   description="全部文章，按时间倒序排列。"
 >
-  <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} slot="ld" />
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   <header class="page-head">
     <h1>文章列表</h1>
     <p>第 {current} 页，共 {totalPages} 页。按时间倒序排列。</p>

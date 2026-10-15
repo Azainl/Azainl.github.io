@@ -31,6 +31,19 @@ const SOURCE = resolve(ROOT, '..', '.agents', 'skills');
 const LINK_DIR = join(ROOT, '.agents');
 const LINK = join(LINK_DIR, 'skills');
 
+// 工作区技能目录不存在 = 干净克隆 / CI 环境。技能目录本就不在版本库内，
+// 只存在于开发机的工作区，所以这里按“不适用”跳过，而不是判为失败——
+// 否则 CI 会变成永远红灯，门禁失去意义。
+if (!existsSync(SOURCE)) {
+  console.log('工作区技能目录不存在，跳过技能链接校验：');
+  console.log('  预期位置 = ' + SOURCE);
+  console.log('  说明：技能目录只存在于开发机工作区（不在版本库内），CI / 干净克隆下必然缺失。');
+  console.log('  本地开发：把技能放入上述目录后，npm install 的 postinstall 会自动重建链接，');
+  console.log('          也可手动执行 npm run link:skills。');
+  console.log('SKIP  未做校验（退出码 0）');
+  process.exit(0);
+}
+
 function listSkills(dir) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)

@@ -1,9 +1,9 @@
 // 临时验证脚本：在真实浏览器环境里对页面做布局与功能断言。
 // 用法：先在另一个终端跑 `npm run dev`（或 `npm run preview`），再执行 `npm run check`
 import { spawn, spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 // 注意：不要写成 dirname(fileURLToPath(new URL('..', import.meta.url)))——
 // fileURLToPath 会保留结尾的反斜杠（"…\blog\"），dirname 再吃掉一层就变成
@@ -949,6 +949,132 @@ for (const path of ['/about/', '/search/']) {
       '首图保留 width/height/srcset（防 CLS 回归）',
       imgs.every((t) => /width="\d+"/.test(t) && /height="\d+"/.test(t) && /srcset="/.test(t)),
     );
+  }
+}
+
+// ---- 渐进增强兜底 & 结构化数据转义（T-12 / A2 的回归防线）----
+// 这两类是「肉眼看不出坏」的缺陷，日常预览永远正常：
+//  - JS 加载失败时正文空白（T-12），只在脚本被拦/网络异常时出现；
+//  - JSON-LD 里 </script> 未转义（A2），只在标题恰好含该串时逃逸。
+// 都只能靠断言守，且必须做故障注入证明断言有牙。
+
+// ⑤ JS 加载失败时正文不得永久空白（T-12）
+{
+  const tabRes = await fetch(
+    `http://127.0.0.1:${PORT}/json/new?${encodeURIComponent('about:blank')}`,
+    { method: 'PUT' },
+  );
+  const tab = await tabRes.json();
+  const cdp = connect(tab.webSocketDebuggerUrl);
+  await cdp.ready;
+  await cdp.send('Page.enable');
+  await cdp.send('Network.enable');
+  // 只拦站点脚本（CSS 照常加载），精确复现「JS 挂了但样式还在」这个最坏情形。
+  // 注意不要连 CSS 一起拦 —— 那样兜底反而会生效，测不出真正的问题。
+  await cdp.send('Network.setBlockedURLs', {
+    urls: ['*/_astro/*.js', '*/_astro/*.js?*'],
+  });
+  await cdp.send('Page.navigate', { url: `${BASE}/posts/blog-build-notes/` });
+  await sleep(1600);
+  const r = await evaluate(
+    cdp,
+    `(() => {
+      const p = document.querySelector('.prose');
+      if (!p) return { hasProse: false, opacity: null, htmlClass: '', revealReady: null };
+      return {
+        hasProse: true,
+        opacity: getComputedStyle(p).opacity,
+        htmlClass: document.documentElement.className,
+        revealReady: document.documentElement.dataset.revealReady ?? null,
+      };
+    })()`,
+  );
+  check('JS 加载失败: 有正文容器', r.hasProse);
+  check(
+    'JS 加载失败: 正文仍可见（T-12 兜底生效）',
+    r.hasProse && r.opacity === '1',
+    `opacity=${r.opacity} class="${r.htmlClass}" revealReady=${r.revealReady}`,
+  );
+  // 兜底不只是「把一段 CSS 改回去」：它靠撤销 html 上的 .js 标记来生效。
+  // 若 .js 被留下，任何一条 `.js .reveal{opacity:0}` 规则都会重新命中。
+  check(
+    'JS 加载失败: 已撤销 html 的 .js 标记',
+    r.hasProse && !/(^|\s)js(\s|$)/.test(r.htmlClass),
+    `class="${r.htmlClass}"`,
+  );
+  cdp.ws.close();
+  await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
+}
+
+// ⑥ 结构化数据（A2）：源码契约 + 构建产物双层断言
+{
+  // (a) 源码契约：任何产出 <script type="application/ld+json"> 的地方都必须走
+  //     safeJsonLd，不许再出现裸 JSON.stringify —— 这是防「改回去」的那道闸。
+  const srcFiles = [];
+  const walkSrc = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walkSrc(p);
+      else if (/\.(astro|ts)$/.test(e.name)) srcFiles.push(p);
+    }
+  };
+  walkSrc(join(ROOT, 'src'));
+  const allSrc = srcFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+  const rawCount = (allSrc.match(/JSON\.stringify\(jsonLd\)/g) || []).length;
+  // 1 处定义 + 4 处调用（文章页/首页/标签页/分页页）
+  const safeCount = (allSrc.match(/safeJsonLd\(/g) || []).length;
+  check('结构化数据: 无裸 JSON.stringify(jsonLd)', rawCount === 0, `${rawCount} 处`);
+  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 5, `${safeCount} 处`);
+  check(
+    '结构化数据: safeJsonLd 转义 < > & U+2028 U+2029',
+    /\\u003c/.test(allSrc) && /\\u003e/.test(allSrc) && /\\u0026/.test(allSrc) && /u2028/.test(allSrc) && /u2029/.test(allSrc),
+  );
+
+  // (b) 构建产物：遍历**每一篇**构建出的文章页 + 各列表页，逐块解析 JSON-LD。
+  //     遍历而非抽查，是因为逃逸只在「标题恰好含 </script>」时触发 ——
+  //     将来真有人写一篇讲 HTML 转义的文章，这条断言会自动把它罩住。
+  const pages = [];
+  for (const entry of readdirSync(join(ROOT, 'dist/posts'), { withFileTypes: true })) {
+    if (entry.isDirectory()) pages.push(`/posts/${entry.name}/`);
+  }
+  for (const p of ['/', '/tags/', '/page/2/']) pages.push(p);
+
+  let badBlocks = 0;
+  let totalBlocks = 0;
+  const badList = [];
+  for (const path of pages) {
+    const res = await fetch(`${BASE}${path}`);
+    if (!res.ok) continue;
+    const html = await res.text();
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    totalBlocks += blocks.length;
+    for (const b of blocks) {
+      // 判据一：块内不得出现未转义的结束标签（这正是逃逸的形态）
+      const escaped = !/<\/script/i.test(b);
+      // 判据二：块必须是合法 JSON（逃逸时会被截断）
+      let parsable = true;
+      try {
+        JSON.parse(b);
+      } catch {
+        parsable = false;
+      }
+      if (!escaped || !parsable) {
+        badBlocks += 1;
+        badList.push(`${path}(escaped=${escaped},parsable=${parsable})`);
+      }
+    }
+  }
+  check(
+    '结构化数据: 全站 JSON-LD 块均可解析且无未转义 </script>',
+    totalBlocks > 0 && badBlocks === 0,
+    badBlocks ? badList.slice(0, 3).join(' | ') : `${pages.length} 页 / ${totalBlocks} 块`,
+  );
+  // 逃逸的真正后果：页面里会多出一段**可执行的**脚本。
+  // 断言「ld+json 之外没有因数据注入而新增的 script」，坐实注入不成立。
+  {
+    const html = await (await fetch(`${BASE}/posts/blog-build-notes/`)).text();
+    const ldCount = (html.match(/<script type="application\/ld\+json"/g) || []).length;
+    check('结构化数据: 文章页 JSON-LD 块数为 1（未被数据撑成多块）', ldCount === 1, `${ldCount} 块`);
   }
 }
 

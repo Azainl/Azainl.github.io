@@ -8,6 +8,33 @@
  */
 import { SITE } from '../consts';
 
+/**
+ * 把结构化数据序列化成**可安全内联进 <script> 的 JSON 字符串**。
+ *
+ * 危险来自 <script> 是 HTML 的「原始文本元素」：它的内容在遇到第一个
+ * `</script` 时就结束，且**不解码 HTML 实体**。因此当文章标题/描述里
+ * 含有 `</script>`（写一篇讲 HTML 转义的文章就会自然出现）时，
+ * 裸 JSON.stringify 会提前闭合脚本标签，把剩余 JSON 当成 HTML 解析 ——
+ * 既是标记结构破坏，也是一个注入点。
+ *
+ * 修法是**JSON 层的 \u 转义，而不是 HTML 实体**：script 内不解码实体，
+ * 写 `&lt;` 只会让 JSON 里多出一段字面量 `&lt;`（数据被改坏），
+ * 而 `\u003c` 是合法的 JSON 转义，解析后仍是 `<`，语义完全不变。
+ * 转义 `&` 与 U+2028/U+2029 同理：前者防止实体被二次解释，
+ * 后者虽不闭合标签，但部分 JSON 解析器会因它报错。
+ *
+ * JSON 结构字符（`{}` `[]` `:` `,` 数字与裸字面量）不含这五个字符，
+ * 故整体替换不会破坏 JSON 结构。
+ */
+export function safeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 /** 站内绝对地址：结构化数据里必须是绝对 URL（相对路径对爬虫无意义） */
 export function absUrl(path: string, site: URL | undefined): string {
   return new URL(path, site).href;

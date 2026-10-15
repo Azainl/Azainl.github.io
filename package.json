@@ -13,7 +13,8 @@
     "check": "node scripts/check.mjs",
     "check:skills": "node scripts/link-skills.mjs --check",
     "link:skills": "node scripts/link-skills.mjs",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "postinstall": "node scripts/link-skills.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -26,6 +27,9 @@
   },
   "devDependencies": {
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "overrides": {
     "source-map-js": "^1.2.2"
