@@ -20,7 +20,7 @@
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
     "@fontsource-variable/geist": "^5.2.0",
-    "@fontsource-variable/source-serif-4": "^5.2.0",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
     "@phosphor-icons/core": "^2.1.1",
     "astro": "^7.3.5",
     "astro-icon": "^1.2.0"
