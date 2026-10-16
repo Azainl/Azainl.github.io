@@ -1,0 +1,105 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { SITE } from '../../consts';
+import { Icon } from 'astro-icon/components';
+import { tagSlug } from '../../data/tags';
+import { seriesDescription, seriesSlug } from '../../data/series';
+import { vtName } from '../../utils/vtName';
+import { url } from '../../utils/url';
+import { getPublishedPosts } from '../../utils/posts';
+import { getSeriesPosts, getUsedSeries } from '../../utils/series';
+import { breadcrumbList, collectionPage, safeJsonLd } from '../../utils/jsonld';
+
+export async function getStaticPaths() {
+  const posts = await getPublishedPosts();
+  const series = getUsedSeries(posts);
+  return [...series.keys()].map((name) => ({
+    params: { name: seriesSlug(name) },
+    props: { name },
+  }));
+}
+
+const { name } = Astro.props;
+const posts = getSeriesPosts(await getPublishedPosts(), name);
+
+const seriesPath = `/series/${seriesSlug(name)}/`;
+const description =
+  seriesDescription(name) ?? `「${name}」系列的全部文章，按阅读顺序排列。`;
+
+// 与标签页同一份口径：只声明页面上真实存在的聚合语义。
+// 系列页比标签页多一层信息——它是有**顺序**的列表，所以用 ItemList 表达顺序，
+// 而不是仅仅"一组文章"。
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    collectionPage({
+      name: `${name} · ${SITE.name}`,
+      description,
+      path: seriesPath,
+      posts,
+      site: Astro.site,
+    }),
+    breadcrumbList(
+      [
+        { path: '/', name: '首页' },
+        { name: name },
+      ],
+      Astro.site,
+    ),
+  ],
+};
+---
+
+<BaseLayout title={`${name} · ${SITE.name}`} description={description}>
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
+  <div class="page-head reveal">
+    <button
+      class="post-back"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+    >
+      <Icon name="arrow-left" size={15} />
+      <span>返回</span>
+    </button>
+    <p class="post-meta">系列</p>
+    <h1>{name}</h1>
+    <p>{description} · 共 {posts.length} 篇</p>
+  </div>
+
+  <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
+    <ol class="post-list">
+      {
+        posts.map((post, i) => (
+          <li class="post-row">
+            <a href={url(`/posts/${post.id}/`)}>
+              <time datetime={post.data.date.toISOString()}>
+                {/* 序号而非日期：系列的阅读顺序由 seriesOrder 决定，
+                    不是发布日期；显示日期会让读者误以为该按日期读。 */}
+                {String(i + 1).padStart(2, '0')}
+              </time>
+              <div>
+                <h2 class="post-row-title" transition:name={vtName(post.id)} transition:animate="none">
+                  {post.data.title}
+                </h2>
+                <p>{post.data.description}</p>
+              </div>
+            </a>
+            {post.data.tags.length > 0 && (
+              <ul class="tag-list">
+                {post.data.tags.map((t) => (
+                  <li>
+                    <a class="tag" href={url(`/tags/${tagSlug(t)}/`)}>#{t}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))
+      }
+    </ol>
+    <p class="back-row">
+      <a class="back-link" href={url('/')}>← 返回首页</a>
+    </p>
+  </section>
+</BaseLayout>

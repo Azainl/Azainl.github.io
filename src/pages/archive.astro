@@ -1,0 +1,177 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../consts';
+import { Icon } from 'astro-icon/components';
+import { formatDate } from '../utils/formatDate';
+import { tagSlug } from '../data/tags';
+import { vtName } from '../utils/vtName';
+import { url } from '../utils/url';
+import { getPublishedPosts } from '../utils/posts';
+import { readingTime } from '../utils/readingTime';
+import { breadcrumbList, collectionPage, safeJsonLd } from '../utils/jsonld';
+
+const posts = await getPublishedPosts();
+
+/** 按年 → 月分组。月份降序，与文章日期倒序一致。 */
+interface MonthGroup {
+  month: number;
+  posts: typeof posts;
+}
+interface YearGroup {
+  year: number;
+  months: MonthGroup[];
+  count: number;
+}
+
+const byYear = new Map<number, Map<number, typeof posts>>();
+for (const post of posts) {
+  const year = post.data.date.getFullYear();
+  const month = post.data.date.getMonth() + 1;
+  if (!byYear.has(year)) byYear.set(year, new Map());
+  const months = byYear.get(year)!;
+  if (!months.has(month)) months.set(month, []);
+  months.get(month)!.push(post);
+}
+
+const years: YearGroup[] = [...byYear.entries()]
+  .sort((a, b) => b[0] - a[0])
+  .map(([year, months]) => ({
+    year,
+    months: [...months.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([month, list]) => ({ month, posts: list })),
+    count: [...months.values()].reduce((n, list) => n + list.length, 0),
+  }));
+
+// 统计：篇数、字数、跨度。字数按正文汉字数粗算 —— 与 readingTime 同一口径，
+// 只是不参与"分钟数"换算。诚实起见标注"约"。
+const charCount = posts.reduce(
+  (n, post) => n + ((post.body ?? '').match(/[\u4e00-\u9fff]/g) ?? []).length,
+  0,
+);
+const tagCount = new Set(posts.flatMap((post) => post.data.tags)).size;
+const spanYears = years.length;
+const tenThousand = (n: number) => (n / 10000).toFixed(1);
+
+// 全站总阅读时长：逐篇用 readingTime 同一函数累加，避免出现「24 篇 5 分钟、8 篇 6 分钟」
+// 这类按平均估算出来的假数字。篇数小于 15 时直接给分钟数，不加「约」。
+const totalMinutes = posts.reduce(
+  (n, post) => n + readingTime(post.body ?? ''),
+  0,
+);
+const hours = Math.floor(totalMinutes / 60);
+const restMinutes = totalMinutes % 60;
+const durationText =
+  totalMinutes < 60
+    ? `${totalMinutes} 分钟`
+    : restMinutes === 0
+      ? `${hours} 小时`
+      : `${hours} 小时 ${restMinutes} 分钟`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    collectionPage({
+      name: `全部文章 · ${SITE.name}`,
+      description: '本博客发布过的全部文章，按年月归档。',
+      path: '/archive/',
+      posts,
+      site: Astro.site,
+    }),
+    breadcrumbList(
+      [
+        { path: '/', name: '首页' },
+        { name: '归档' },
+      ],
+      Astro.site,
+    ),
+  ],
+};
+---
+
+<BaseLayout
+  title={`全部文章 · ${SITE.name}`}
+  description="本博客发布过的全部文章，按年月归档。"
+>
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
+  <div class="page-head reveal">
+    <button
+      class="post-back"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+    >
+      <Icon name="arrow-left" size={15} />
+      <span>返回</span>
+    </button>
+    <p class="post-meta">归档</p>
+    <h1>全部文章</h1>
+    <p>
+      共 {posts.length} 篇，约 {tenThousand(charCount)} 万字，读完约 {durationText}，跨 {spanYears} 年、{tagCount} 个标签。
+    </p>
+  </div>
+
+  {/* 年份锚点：只是在页内跳转，不用 <a href="#..."> 的默认平滑滚动，
+      CSS 已全局开启 scroll-behavior。 */}
+  <nav class="archive-years reveal" aria-label="按年份跳转">
+    {
+      years.map((y) => (
+        <a class="archive-year-link" href={`#year-${y.year}`}>
+          {y.year}
+          <span class="archive-year-count">{y.count}</span>
+        </a>
+      ))
+    }
+  </nav>
+
+  <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
+    {
+      years.map((y) => (
+        <div class="year-group archive-year" id={`year-${y.year}`}>
+          <h2 class="year-label reveal">{y.year}</h2>
+          {y.months.map((m) => (
+            <div class="month-group">
+              <h3 class="month-label">{m.month} 月</h3>
+              <ol class="post-list">
+                {m.posts.map((post) => (
+                  <li class="post-row">
+                    <a href={url(`/posts/${post.id}/`)}>
+                      <time datetime={post.data.date.toISOString()}>
+                        {String(post.data.date.getDate()).padStart(2, '0')} 日
+                      </time>
+                      <div>
+                        <h4
+                          class="post-row-title"
+                          transition:name={vtName(post.id)}
+                          transition:animate="none"
+                        >
+                          {post.data.title}
+                        </h4>
+                        <p>{post.data.description}</p>
+                      </div>
+                    </a>
+                    {post.data.tags.length > 0 && (
+                      <ul class="tag-list">
+                        {post.data.tags.map((t) => (
+                          <li>
+                            <a class="tag" href={url(`/tags/${tagSlug(t)}/`)}>#{t}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
+      ))
+    }
+    <p class="back-row">
+      <a class="back-link" href={url('/')}>← 返回首页</a>
+    </p>
+  </section>
+
+  {/* 供断言使用：归档页收录的文章 id 清单（与首页对拍同一集合） */}
+  <script type="application/json" id="archive-slugs" is:inline set:html={JSON.stringify(posts.map((p) => p.id))} />
+</BaseLayout>

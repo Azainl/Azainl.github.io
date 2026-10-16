@@ -43,6 +43,10 @@ for (const post of pagePosts) {
 }
 const years = [...byYear.entries()];
 
+// 边界的「上一页 / 下一页」按钮虽然 aria-disabled + tabindex=-1 + CSS 屏蔽点击，
+// 但 href 若照常算成 page±1，就会在构建产物里留下指向不存在页面的死链
+// （最后一页的「下一页」指向 /page/7/）。URL 会被爬虫与链接检查器真实访问，
+// 所以禁用态一律指向当前页 —— 外观与语义不变，但不再产生死链。
 const pageUrl = (n: number) => (n <= 1 ? url('/') : url(`/page/${n}/`));
 const yearGroupReveal = (index: number) => `--reveal-delay: ${riseBase + Math.min(index * 80, 320)}ms`;
 
@@ -107,7 +111,7 @@ pagePosts.forEach((post, i) => {
           data-dir="prev"
           data-vt-axis="x"
           data-vt-dir="prev"
-          href={pageUrl(page - 1)}
+          href={page === 1 ? pageUrl(1) : pageUrl(page - 1)}
           aria-disabled={page === 1 ? 'true' : undefined}
           tabindex={page === 1 ? '-1' : undefined}
         >
@@ -134,7 +138,7 @@ pagePosts.forEach((post, i) => {
           data-dir="next"
           data-vt-axis="x"
           data-vt-dir="next"
-          href={pageUrl(page + 1)}
+          href={page === totalPages ? pageUrl(page) : pageUrl(page + 1)}
           aria-disabled={page === totalPages ? 'true' : undefined}
           tabindex={page === totalPages ? '-1' : undefined}
         >

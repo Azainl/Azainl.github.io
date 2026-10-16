@@ -157,7 +157,12 @@ const targets = [
   ['post-light', `${BASE}/posts/blog-build-notes/`, { width: 1440, height: 1000, dark: false }],
   ['about-light', `${BASE}/about/`, { width: 1440, height: 1000, dark: false }],
   ['tags-light', `${BASE}/tags/`, { width: 1440, height: 1000, dark: false }],
+  ['archive-light', `${BASE}/archive/`, { width: 1440, height: 1400, dark: false }],
+  ['archive-dark', `${BASE}/archive/`, { width: 1440, height: 1400, dark: true }],
+  ['series-light', `${BASE}/series/astro-blog/`, { width: 1440, height: 1000, dark: false }],
+  ['series-nav-light', `${BASE}/posts/blog-build-notes/`, { width: 1440, height: 1600, dark: false }],
   ['index-mobile', `${BASE}/`, { width: 390, height: 844, dark: false }],
+  ['archive-mobile', `${BASE}/archive/`, { width: 390, height: 1000, dark: false }],
 ];
 
 for (const [name, url, opts] of targets) {

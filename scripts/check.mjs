@@ -792,7 +792,7 @@ await linksCdp.ready;
 await linksCdp.send('Page.enable');
 await linksCdp.send('Page.navigate', { url: `${BASE}/` });
 await sleep(1000);
-const hrefs = await evaluate(linksCdp, `(() => {
+const homeHrefs = await evaluate(linksCdp, `(() => {
   const links = [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'));
   const out = [];
   for (const h of links) {
@@ -802,6 +802,28 @@ const hrefs = await evaluate(linksCdp, `(() => {
 })()`);
 linksCdp.ws.close();
 await fetch(`http://127.0.0.1:${PORT}/json/close/${linksTab.id}`);
+
+// 标题曾写「全站」，实际只扫首页。实测首页仅 33 条站内链接，全站去重后 54 条 ——
+// 也就是 21 条从未被任何断言探测过（缺一篇、写错一个 slug 都不会被发现）。
+// 这里改为：从 sitemap 取全部页面 URL，逐页抓 href 合并去重，再逐一探测。
+const sitemapXml = await (await fetch(`${BASE}/sitemap-0.xml`)).text();
+const pagePaths = [...sitemapXml.matchAll(/<loc>([^<]+)<\/loc>/g)]
+  .map((m) => m[1].replace(/^https?:\/\/[^/]+/, ''))
+  .filter((p) => p);
+const hrefSet = new Set();
+for (const p of pagePaths) {
+  const res = await fetch(`${BASE}${p}`);
+  if (!res.ok) continue;
+  const html = await res.text();
+  for (const m of html.matchAll(/href="(\/[^"]*)"/g)) hrefSet.add(m[1]);
+}
+const hrefs = [...hrefSet];
+// 下限是闸门：真全站扫描必须落在 45 条以上；退回首页单页扫描会立刻跌破
+check(
+  '全站链接扫描覆盖 sitemap 全部页面',
+  pagePaths.length >= 40 && hrefs.length >= 45,
+  `${pagePaths.length} 页 / ${hrefs.length} 个站内链接（首页单页仅 ${homeHrefs.length} 个）`,
+);
 
 let bad = 0;
 for (const href of hrefs) {
@@ -952,6 +974,263 @@ for (const path of ['/about/', '/search/']) {
   }
 }
 
+// ---- 归档页 / 系列页 / 修订记录（P1 新增功能）----
+// 这三项的共同点：它们都是"新增的**派生视图**"，数据来自 frontmatter 与文章集合。
+// 派生视图最典型的退化是**悄悄少一篇或顺序错乱** —— 页面照样打得开、样式也正常，
+// 只有把集合逐一对拍才看得见。所以这里全部用对拍，不用"存在性"糊过去。
+
+// ① 归档页：文章集合必须与搜索索引（同一份已发布集合）逐一对拍
+{
+  const archiveHtml = await (await fetch(BASE + '/archive/')).text();
+  check('归档页存在', archiveHtml.length > 0);
+
+  // 归档页自己吐出的 slug 清单，按顺序（年月倒序）排列
+  const m = /<script type="application\/json" id="archive-slugs"[^>]*>([\s\S]*?)<\/script>/.exec(archiveHtml);
+  let archived = null;
+  try {
+    archived = m ? JSON.parse(m[1]) : null;
+  } catch {
+    archived = null;
+  }
+  check('归档页输出了可解析的文章清单', Array.isArray(archived) && archived.length > 0, (archived ? archived.length : 0) + ' 条');
+
+  if (Array.isArray(archived)) {
+    // 与 /search.json 对拍：两份都是"全部已发布文章"，少任何一篇都是缺陷
+    const searchIndex = await (await fetch(BASE + '/search.json')).json();
+    const a = [...archived].sort();
+    const b = searchIndex.map((p) => p.slug).sort();
+    const missing = b.filter((s) => !a.includes(s));
+    const extra = a.filter((s) => !b.includes(s));
+    check(
+      '归档页文章集合与搜索索引一致',
+      missing.length === 0 && extra.length === 0,
+      '归档=' + a.length + ' 索引=' + b.length + ' 缺=' + (missing.slice(0, 3).join(',') || '无') + ' 多=' + (extra.slice(0, 3).join(',') || '无'),
+    );
+
+    // 列表行数必须与清单长度一致 —— 分组逻辑（年/月）写错会丢行但不改清单
+    const rows = (archiveHtml.match(/<li class="post-row[ "]/g) || []).length;
+    check('归档页列表行数与清单一致', rows === archived.length, '行=' + rows + ' 清单=' + archived.length);
+
+    // 年份锚点：每个 section 的 id 都要有对应的跳转链接，否则点了不动
+    const ids = [...archiveHtml.matchAll(/id="year-(\d{4})"/g)].map((x) => x[1]);
+    const links = [...archiveHtml.matchAll(/href="#year-(\d{4})"/g)].map((x) => x[1]);
+    check(
+      '归档页每个年份锚点都有跳转链接',
+      ids.length > 0 && ids.length === links.length && ids.every((y) => links.includes(y)),
+      '锚点=' + ids.join(',') + ' 链接=' + links.join(','),
+    );
+    // 月份分组标题数必须 > 0，否则分组循环整个空转（列表会变一条长龙）
+    const months = (archiveHtml.match(/class="month-label"/g) || []).length;
+    check('归档页按月分组', months > 0, months + ' 个月');
+  }
+}
+
+// ② 系列页：顺序、条数、结构化数据三者必须同源
+{
+  const seriesHtml = await (await fetch(BASE + '/series/astro-blog/')).text();
+  check('系列页存在', seriesHtml.length > 0);
+
+  const rows = (seriesHtml.match(/<li class="post-row[ "]/g) || []).length;
+  check('系列页列出文章', rows > 0, rows + ' 篇');
+
+  // 列表左侧的 time 显示的是**阅读序号**（01/02/…），不是日期。
+  // 这是系列页与其它列表页唯一的结构差异 —— 若哪天有人"顺手"改成日期，
+  // 系列顺序这一核心语义就静默丢了，必须断言。
+  const ordinals = [...seriesHtml.matchAll(/<time[^>]*>(\d{2})<\/time>/g)].map((x) => x[1]);
+  check(
+    '系列页用两位阅读序号而非日期',
+    ordinals.length === rows && ordinals.every((v, i) => v === String(i + 1).padStart(2, '0')),
+    ordinals.join(','),
+  );
+
+  const blocks = [...seriesHtml.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((x) => x[1]);
+  let parsed = null;
+  try {
+    parsed = blocks.map((x) => JSON.parse(x));
+  } catch {
+    parsed = null;
+  }
+  check('系列页含可解析的 JSON-LD', parsed !== null && parsed.length > 0, blocks.length + ' 块');
+  if (parsed) {
+    const flat = [];
+    const walk = (n) => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(walk);
+      flat.push(n);
+      Object.values(n).forEach(walk);
+    };
+    parsed.forEach(walk);
+    const cp = flat.find((n) => n['@type'] === 'CollectionPage');
+    check('系列页含 CollectionPage', !!cp);
+    // 与页面行数对拍 —— 声明了页面上没有的文章就是欺骗爬虫
+    check(
+      '系列页 JSON-LD 条数与页面一致',
+      cp && cp.mainEntity && cp.mainEntity.numberOfItems === rows,
+      'ld=' + ((cp && cp.mainEntity && cp.mainEntity.numberOfItems) ?? -1) + ' dom=' + rows,
+    );
+    const bc = flat.find((n) => n['@type'] === 'BreadcrumbList');
+    const names = bc ? bc.itemListElement.map((x) => x.name) : [];
+    check(
+      '系列页面包屑为 首页 > 系列名',
+      !!bc && names[0] === '首页' && !!names[1],
+      bc ? names.join(' > ') : '(none)',
+    );
+  }
+}
+
+// ③ 文章页的系列上下文：系列条 + 系列内前后篇 + BlogPosting.isPartOf
+//    边界是关键：系列第一篇不能有"系列上一篇"，最后一篇不能有"系列下一篇" ——
+//    若边界判断写反（用全站 newer/older 代替系列前后篇），链接会指向系列外的文章，
+//    读者点"系列下一篇"跳到无关内容，而页面看起来完全正常。
+{
+  const first = await (await fetch(BASE + '/posts/blog-build-notes/')).text(); // 系列第 1 篇
+  const last = await (await fetch(BASE + '/posts/head-meta/')).text(); // 系列第 7 篇
+
+  check('系列文章页渲染系列条', /class="post-series"/.test(first));
+  // 系列条要写明"第 N 篇 / 共 M 篇"，只写系列名等于没给定位
+  const bar = (/<p class="post-series">[\s\S]{0,200}?<\/p>/.exec(first) || ['(none)'])[0].replace(/\s+/g, ' ');
+  check(
+    '系列条标明序号与总数',
+    /本系列共\s*\d+\s*篇/.test(first) && /第\s*\d+\s*篇/.test(first),
+    bar.slice(0, 160),
+  );
+
+  const firstNav = (/<nav class="post-series-nav"[\s\S]*?<\/nav>/.exec(first) || [''])[0];
+  const lastNav = (/<nav class="post-series-nav"[\s\S]*?<\/nav>/.exec(last) || [''])[0];
+  check('系列文章页有系列内导航', firstNav.length > 0 && lastNav.length > 0);
+  check('系列第一篇无"系列上一篇"', firstNav.length > 0 && !/系列上一篇/.test(firstNav));
+  check('系列第一篇有"系列下一篇"', /系列下一篇/.test(firstNav));
+  check('系列最后一篇无"系列下一篇"', lastNav.length > 0 && !/系列下一篇/.test(lastNav));
+  check('系列最后一篇有"系列上一篇"', /系列上一篇/.test(lastNav));
+
+  // 结构化数据：BlogPosting 必须声明所属系列，否则富结果不知道这是一套内容
+  const m = /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/.exec(first);
+  if (m) {
+    try {
+      const flat = [];
+      const walk = (n) => {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(walk);
+        flat.push(n);
+        Object.values(n).forEach(walk);
+      };
+      walk(JSON.parse(m[1]));
+      const bp = flat.find((n) => n['@type'] === 'BlogPosting');
+      const partOf = bp ? bp.isPartOf : null;
+      check(
+        '系列文章 BlogPosting.isPartOf 指向 CreativeWorkSeries',
+        !!partOf && partOf['@type'] === 'CreativeWorkSeries' && /\/series\//.test(partOf.url || ''),
+        JSON.stringify(partOf),
+      );
+      const bc = flat.find((n) => n['@type'] === 'BreadcrumbList');
+      const names = bc ? bc.itemListElement.map((x) => x.name) : [];
+      check(
+        '系列文章面包屑含系列级',
+        names[0] === '首页' && names.some((n) => /Astro 博客实践/.test(n)),
+        names.join(' > '),
+      );
+    } catch {}
+  }
+}
+
+// ④ 修订记录：只在 frontmatter 真有 updated 时才出现，且首发日期必须始终在
+{
+  const html = await (await fetch(BASE + '/posts/hello-world/')).text();
+  check('文章页渲染修订记录', /class="post-revision"/.test(html));
+  const seg = (/<p class="post-revision">[\s\S]*?<\/p>/.exec(html) || [''])[0];
+  check(
+    '修订记录含首发日期',
+    /首次发布/.test(seg) && /<time datetime="\d{4}-\d{2}-\d{2}/.test(seg),
+    seg.replace(/\s+/g, ' ').slice(0, 160),
+  );
+}
+
+// ---- 内容侧工程化（P1-4）：OG 图覆盖 / 图片管线 / 阅读时长 ----
+// 这三项的共同点：缺失时页面照样正常，只是"悄悄变差"。
+//  - 漏跑 npm run og：ogImagePath() 会回退到全站默认图，分享卡片退化但页面不报错；
+//  - 有人往 public/ 塞图片：绕过 Astro 优化管线，原图直出、无 srcset、体积翻倍；
+//  - 命中数/时长的统计口径写错：数字看着像真的，但没人对拍就发现不了。
+// 所以全部用"与真实数据源对拍"，不用存在性判断。
+
+// ① OG 图覆盖：og-manifest.ts 的 slug 集合必须与文章集合完全一致
+{
+  const manifestSrc = readFileSync(join(ROOT, 'src/data/og-manifest.ts'), 'utf8');
+  const slugs = [...manifestSrc.matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]);
+  const searchIndex = await (await fetch(BASE + '/search.json')).json();
+  const postSlugs = searchIndex.map((p) => p.slug).sort();
+  const manifest = [...slugs].sort();
+  const missing = postSlugs.filter((s) => !manifest.includes(s));
+  const extra = manifest.filter((s) => !postSlugs.includes(s));
+  check(
+    'OG 清单与文章集合一致（漏跑 npm run og 会在这里暴露）',
+    missing.length === 0 && extra.length === 0 && manifest.length > 0,
+    '文章=' + postSlugs.length + ' 清单=' + manifest.length + ' 缺=' + (missing.slice(0, 3).join(',') || '无') + ' 多=' + (extra.slice(0, 3).join(',') || '无'),
+  );
+  // 清单里每一个 slug 都必须真有对应文件，否则 ogImagePath 会给出 404 链接
+  const fs = await import('node:fs');
+  const missingFiles = manifest.filter(
+    (s) => !fs.existsSync(join(ROOT, 'public/og', s + '.png')),
+  );
+  check(
+    'OG 清单每项都有对应 png 文件',
+    missingFiles.length === 0,
+    missingFiles.slice(0, 3).join(',') || '全部存在',
+  );
+}
+
+// ② 图片不得绕过优化管线：public/ 下只允许 og.png（兜底分享图）与非图片资源
+{
+  const fs = await import('node:fs');
+  const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p, out);
+      else out.push(p);
+    }
+    return out;
+  };
+  const publicFiles = walk(join(ROOT, 'public'));
+  const IMG = /\.(jpe?g|png|webp|gif|avif|bmp|tiff?)$/i;
+  const offenders = publicFiles
+    .map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/'))
+    .filter((p) => IMG.test(p))
+    .filter((p) => p !== 'public/og.png' && !p.startsWith('public/og/'));
+  check(
+    'public/ 下无绕过优化管线的图片（og.png 与 public/og/ 白名单除外）',
+    offenders.length === 0,
+    offenders.slice(0, 3).join(',') || '仅 ' + publicFiles.filter((p) => IMG.test(p)).length + ' 个白名单文件',
+  );
+  // 构建产物里也不应出现未压缩的 jpg/gif —— Astro 会把 src/assets 的图转成 webp
+  const distImgs = walk(join(ROOT, 'dist'))
+    .map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/'))
+    .filter((p) => /\.(jpe?g|gif)$/i.test(p));
+  check('构建产物无未压缩 jpg/gif', distImgs.length === 0, distImgs.slice(0, 3).join(',') || '0 个');
+}
+
+// ③ 归档页总阅读时长：必须等于逐篇 readingTime 之和，不能是平均值估算
+{
+  const archiveHtml = await (await fetch(BASE + '/archive/')).text();
+  const m = /读完约\s*(\d+)\s*分钟/.exec(archiveHtml);
+  const shown = m ? Number(m[1]) : null;
+
+  // 独立重算：从 search.json 的正文重算（与页面用的是同一个 readingTime 公式）
+  const searchIndex = await (await fetch(BASE + '/search.json')).json();
+  const calc = searchIndex.reduce((n, p) => {
+    const cjk = (p.content.match(/[\u4e00-\u9fff]/g) || []).length;
+    const words = (p.content.match(/[A-Za-z0-9]+/g) || []).length;
+    return n + Math.max(1, Math.ceil(cjk / 400 + words / 200));
+  }, 0);
+  // search.json 的 content 是从 Markdown 抽的纯文本，与 post.body 口径可能略有差异，
+  // 因此只要求"同一数量级且不相差 10% 以上"——重点是防止"写成固定值/写错公式"。
+  const ratio = shown ? calc / shown : 0;
+  check(
+    '归档页阅读时长与逐篇累计一致（±10%）',
+    shown !== null && shown > 0 && ratio > 0.9 && ratio < 1.1,
+    '页面=' + shown + ' 独立重算=' + calc,
+  );
+  check('归档页阅读时长不是固定值', shown !== null && shown !== 1 && shown !== 100, String(shown));
+}
+
 // ---- 渐进增强兜底 & 结构化数据转义（T-12 / A2 的回归防线）----
 // 这两类是「肉眼看不出坏」的缺陷，日常预览永远正常：
 //  - JS 加载失败时正文空白（T-12），只在脚本被拦/网络异常时出现；
@@ -1021,10 +1300,12 @@ for (const path of ['/about/', '/search/']) {
   walkSrc(join(ROOT, 'src'));
   const allSrc = srcFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
   const rawCount = (allSrc.match(/JSON\.stringify\(jsonLd\)/g) || []).length;
-  // 1 处定义 + 4 处调用（文章页/首页/标签页/分页页）
+  // 1 处定义 + 6 处调用（文章页/首页/标签页/分页页/归档页/系列页）。
+  // 每新增一个产出 JSON-LD 的页面，这里的下限必须同步上调 —— 否则
+  // 新页面完全可以用裸 JSON.stringify 而不被发现（下限是闸门，不是描述）。
   const safeCount = (allSrc.match(/safeJsonLd\(/g) || []).length;
   check('结构化数据: 无裸 JSON.stringify(jsonLd)', rawCount === 0, `${rawCount} 处`);
-  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 5, `${safeCount} 处`);
+  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 7, `${safeCount} 处`);
   check(
     '结构化数据: safeJsonLd 转义 < > & U+2028 U+2029',
     /\\u003c/.test(allSrc) && /\\u003e/.test(allSrc) && /\\u0026/.test(allSrc) && /u2028/.test(allSrc) && /u2029/.test(allSrc),
@@ -1037,7 +1318,7 @@ for (const path of ['/about/', '/search/']) {
   for (const entry of readdirSync(join(ROOT, 'dist/posts'), { withFileTypes: true })) {
     if (entry.isDirectory()) pages.push(`/posts/${entry.name}/`);
   }
-  for (const p of ['/', '/tags/', '/page/2/']) pages.push(p);
+  for (const p of ['/', '/tags/', '/page/2/', '/archive/', '/series/astro-blog/']) pages.push(p);
 
   let badBlocks = 0;
   let totalBlocks = 0;

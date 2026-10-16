@@ -294,6 +294,36 @@ mark {
   color: var(--rule);
 }
 
+/* 系列条：文章页头部的「本系列共 N 篇 · 第 k 篇」。
+   用左侧一条竖线把自己和上面的元信息行区分开，而不是再加一个圆角胶囊 ——
+   胶囊会和 .tag 抢同一层视觉语言（标签才是胶囊）。 */
+.post-series {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0.3rem 0 0.3rem 0.7rem;
+  border-left: 2px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.post-series svg {
+  flex: none;
+  color: var(--accent);
+}
+.post-series-link {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.2em;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+.post-series-link:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
 .post-title {
   margin: 0;
   font-family: var(--font-serif);
@@ -340,6 +370,80 @@ mark {
   color: var(--accent);
 }
 
+/* 归档页：年份锚点条 */
+.archive-years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: var(--container-wide);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-6);
+}
+.archive-year-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inline);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.archive-year-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.archive-year-count {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+}
+
+/* 滚动到锚点时给年份留出页头高度，否则标题会被固定页头压住 */
+.archive-year {
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+/* 归档页的月份小标题：比年份低一级，比文章行高一级。
+   用一条短的 accent 横线代替缩进来表达层级。 */
+.month-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-6) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.month-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+.month-group:first-of-type .month-label {
+  margin-top: var(--space-4);
+}
+
+.post-footer .post-revision {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.post-revision time {
+  color: var(--ink-2);
+}
+
 .post-footer .back {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -382,6 +486,64 @@ mark {
   line-height: 1.4;
 }
 
+/* 系列内导航：与全站「上一篇 / 下一篇」是**两回事**，所以长得不一样。
+   全站导航是按日期的两张并列卡片（可能跨系列）；这里是一个带系列名与
+   进度的整体区块 —— 左侧同样用 accent 竖线呼应头部的系列条。 */
+.post-series-nav {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) 1.15rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.post-series-nav-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.post-series-nav-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.post-series-nav-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.post-footer .post-series-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-decoration: none;
+  color: var(--ink);
+}
+.post-series-step.next {
+  text-align: right;
+}
+.post-series-step-dir {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.post-series-step-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.4;
+}
+@media (max-width: 640px) {
+  .post-series-nav-links {
+    grid-template-columns: 1fr;
+  }
+  .post-series-step.next {
+    text-align: left;
+  }
+}
 /* 相关文章：细线分隔的行，而不是一排圆角盒子 —— 一排盒子会变成卡片墙 */
 .related {
   margin-top: var(--space-12);

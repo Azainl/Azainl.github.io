@@ -10,6 +10,8 @@ import { tagSlug } from '../data/tags';
 import { url } from '../utils/url';
 import { breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { lastModified, ogImagePath } from '../utils/posts';
+import { seriesSlug } from '../data/series';
+import type { SeriesContext } from '../utils/series';
 // Astro 7：条目方法 post.render() 换成了具名导出 render(post)
 import { render } from 'astro:content';
 
@@ -18,9 +20,11 @@ interface Props {
   newer?: CollectionEntry<'posts'> | null;
   older?: CollectionEntry<'posts'> | null;
   related?: CollectionEntry<'posts'>[];
+  /** 系列上下文。非系列文章为 null（或 undefined），页面整块隐藏系列相关 UI */
+  series?: SeriesContext | null;
 }
 
-const { post, newer, older, related = [] } = Astro.props;
+const { post, newer, older, related = [], series = null } = Astro.props;
 const { Content, headings } = await render(post);
 // Content Layer API 里 body 可能为 undefined（只有 data 的条目），给个兜底
 const minutes = readingTime(post.body ?? '');
@@ -34,6 +38,10 @@ const modified = lastModified(post);
 const isRevised = modified > post.data.date;
 
 const canonical = new URL(url(`/posts/${post.id}/`), Astro.site).href;
+// 文章所属系列页的绝对地址（非系列文章为 null）
+const seriesUrl = series
+  ? new URL(url(`/series/${seriesSlug(series.name)}/`), Astro.site).href
+  : null;
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -50,13 +58,19 @@ const jsonLd = {
       author: { '@type': 'Person', name: SITE.author },
       publisher: { '@type': 'Organization', name: SITE.name },
       mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+      // 系列文章声明它属于哪个系列（schema.org 的 isPartOf）。
+      // 非系列文章**不加这个键**，而不是加一个 null —— 后者在结构化数据里
+      // 是"声明了一个空关系"，不如不声明。
+      ...(seriesUrl ? { isPartOf: { '@type': 'CreativeWorkSeries', name: series.name, url: seriesUrl } } : {}),
     },
-    // 面包屑：首页 → 首个标签 → 本文。
-    // 只取**一个**标签：文章可能属于多个标签，全列会让层级变成树而非链，
+    // 面包屑：首页 → 系列页（如有）→ 首个标签 → 本文。
+    // 标签只取**一个**：文章可能属于多个标签，全列会让层级变成树而非链，
     // 而 schema.org 的 BreadcrumbList 表达的是单条路径。
+    // 系列排在标签前面 —— 系列是更强的上下文，读者更可能从这里往回走。
     breadcrumbList(
       [
         { path: '/', name: '首页' },
+        ...(series ? [{ path: `/series/${seriesSlug(series.name)}/`, name: series.name }] : []),
         ...(post.data.tags.length
           ? [
               {
@@ -113,6 +127,19 @@ const jsonLd = {
           )
         }
       </p>
+      {/* 系列条：非系列文章整块不渲染（series 为 null）。放在标题之前，
+          让读者在进入正文前就知道"这是系列第几篇"，而不是读到底部才发现。 */}
+      {
+        series && (
+          <p class="post-series">
+            <Icon name="stack" size={15} />
+            <span>本系列共 {series.total} 篇 · 第 {series.position} 篇</span>
+            <a class="post-series-link" href={url(`/series/${seriesSlug(series.name)}/`)}>
+              {series.name}
+            </a>
+          </p>
+        )
+      }
       {/* 同列表标题：name 必需，但 Astro 生成的动画块被 effects.css 的通配规则覆盖，
           用 animate="none" 避免为每个具名元素输出约 2.4 KB 的无用 CSS（T-19） */}
       <h1 class="post-title" transition:name={vtName(post.id)} transition:animate="none">
@@ -191,6 +218,32 @@ const jsonLd = {
     }
 
     <footer class="post-footer reveal" style="--reveal-delay: 160ms">
+      {/* 系列内导航：与全站"上一篇/下一篇"（按日期，跨系列）区分开。
+          两者都出现，但标签不同 —— 否则读者会以为"上一篇"就是系列上一篇。 */}
+      {
+        series && (series.previous || series.next) && (
+          <nav class="post-series-nav" aria-label={`系列「${series.name}」内的文章`}>
+            <p class="post-series-nav-title">
+              系列 · {series.name}
+              <span class="post-series-nav-count">{series.position} / {series.total}</span>
+            </p>
+            <div class="post-series-nav-links">
+              {series.previous && (
+                <a class="post-series-step prev" href={url(`/posts/${series.previous.id}/`)}>
+                  <span class="post-series-step-dir">系列上一篇</span>
+                  <span class="post-series-step-title">{series.previous.data.title}</span>
+                </a>
+              )}
+              {series.next && (
+                <a class="post-series-step next" href={url(`/posts/${series.next.id}/`)}>
+                  <span class="post-series-step-dir">系列下一篇</span>
+                  <span class="post-series-step-title">{series.next.data.title}</span>
+                </a>
+              )}
+            </div>
+          </nav>
+        )
+      }
       <nav class="post-nav" aria-label="上一篇和下一篇">
         {
           newer && (
@@ -219,6 +272,23 @@ const jsonLd = {
           )
         }
       </nav>
+      {/* 修订记录：文章页此前只在页头夹缝里写一句"更新于"，读者很难把它
+          和"这是什么时候写的"对上。这里把首发与最后修订并排写清。
+          非修订文章只显示首发 —— 不编造一行"从未修订"，那只是噪音。 */}
+      <p class="post-revision">
+        <span>
+          首次发布
+          <time datetime={post.data.date.toISOString()}>{formatDate(post.data.date)}</time>
+        </span>
+        {
+          isRevised && (
+            <span>
+              最后修订
+              <time datetime={modified.toISOString()}>{formatDate(modified)}</time>
+            </span>
+          )
+        }
+      </p>
       <a class="back" href={url('/')}>← 返回首页</a>
     </footer>
   </article>

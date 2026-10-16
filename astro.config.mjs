@@ -28,7 +28,9 @@ function readPosts() {
     try {
       tags = JSON.parse(pick('tags') || '[]');
     } catch {}
-    posts.push({ slug: name.replace(/\.md$/, ''), date, tags });
+    // series 用于给 /series/<slug>/ 页算 lastmod（该系列最新一篇的日期）
+    const series = pick('series');
+    posts.push({ slug: name.replace(/\.md$/, ''), date, tags, series });
   }
   return posts;
 }
@@ -43,13 +45,32 @@ function readTagSlugs() {
   return map;
 }
 
+/** 系列名 → slug 映射（与 src/data/series.ts 同源；同样只做正则提取） */
+function readSeriesSlugs() {
+  const src = readFileSync(new URL('./src/data/series.ts', import.meta.url), 'utf8');
+  const map = new Map();
+  for (const m of src.matchAll(/\{\s*name:\s*'([^']+)',\s*slug:\s*'([^']+)'/g)) {
+    map.set(m[2], m[1]); // slug -> 展示名
+  }
+  return map;
+}
+
 const POSTS = readPosts();
 const TAG_SLUGS = readTagSlugs();
+const SERIES_SLUGS = readSeriesSlugs();
 const NEWEST = POSTS.reduce((acc, p) => (p.date > acc ? p.date : acc), '');
 
 /** 某标签下最新一篇的日期 */
 function newestForTag(name) {
   return POSTS.filter((p) => p.tags.includes(name)).reduce(
+    (acc, p) => (p.date > acc ? p.date : acc),
+    '',
+  );
+}
+
+/** 某系列下最新一篇的日期（系列按阅读顺序排，但"最后更新"仍是日期语义） */
+function newestForSeries(name) {
+  return POSTS.filter((p) => p.series === name).reduce(
     (acc, p) => (p.date > acc ? p.date : acc),
     '',
   );
@@ -71,10 +92,19 @@ export default defineConfig({
 
         const post = POSTS.find((p) => path === `/posts/${p.slug}/`);
         if (post) lastmod = post.date;
-        else if (path === '/' || path === '/tags/' || /^\/page\/\d+\/$/.test(path)) lastmod = NEWEST;
+        else if (
+          path === '/' ||
+          path === '/tags/' ||
+          path === '/archive/' ||
+          /^\/page\/\d+\/$/.test(path)
+        )
+          lastmod = NEWEST;
         else {
           const tag = /^\/tags\/([^/]+)\/$/.exec(path);
           if (tag && TAG_SLUGS.has(tag[1])) lastmod = newestForTag(TAG_SLUGS.get(tag[1]));
+          const series = /^\/series\/([^/]+)\/$/.exec(path);
+          if (series && SERIES_SLUGS.has(series[1]))
+            lastmod = newestForSeries(SERIES_SLUGS.get(series[1]));
         }
 
         if (lastmod) item.lastmod = lastmod;

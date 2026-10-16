@@ -3,6 +3,8 @@ title: "自定义 Astro RSS：让订阅源更完整"
 description: "博客的 rss.xml 是怎么生成的：完整摘要、标签分类、标准时间格式，以及构建时自动更新。"
 date: 2026-08-06
 tags: ["Astro", "写作", "SEO"]
+series: "Astro 博客实践"
+seriesOrder: 3
 ---
 
 Astro 自带 `@astrojs/rss`，默认就能生成订阅源，但开箱即用的输出偏简陋。这个站点在它基础上补了几处，让主流阅读器（Feedly、Inoreader 等）的体验更完整。

@@ -3,6 +3,8 @@ title: "从零搭建这个博客：技术选型记录"
 description: "本站从零搭建的完整记录：为什么选 Astro、内容集合怎么用、字体如何自托管、部署到哪。"
 date: 2026-07-25
 tags: ["前端", "Astro", "写作"]
+series: "Astro 博客实践"
+seriesOrder: 1
 featured: true
 ---
 
