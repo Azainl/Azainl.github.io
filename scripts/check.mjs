@@ -2,6 +2,7 @@
 // 用法：先在另一个终端跑 `npm run dev`（或 `npm run preview`），再执行 `npm run check`
 import { spawn, spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -855,6 +856,45 @@ if (searchJsonRes.ok) {
   );
 }
 
+// ---- T-21 搜索索引体积门禁（2026-10-19）----
+// 背景：这条门禁原本只是 src/pages/search.json.ts 里的 console.warn，从不出现在
+// check 输出里，等于没人看得见。截断从 2000 字降到 500 字后，把体积变成硬断言。
+// 口径统一用 gzip：规划原文「100 篇 < 100 KB」没写口径，raw 口径必须截到 240 字，
+// gzip 口径 500 字在 100 篇时约 69 KB 即达标（见 docs/后续功能开发计划.md §1.3）。
+{
+  const searchBody = await (await fetch(`${BASE}/search.json`)).text();
+  const searchBuf = Buffer.from(searchBody, 'utf8');
+  check(
+    'T-21 搜索索引 raw 体积达标',
+    searchBuf.length <= 52 * 1024,
+    `${searchBuf.length} B ≤ ${52 * 1024} B（改前 59049，500 字档实测 49905）`,
+  );
+  check(
+    'T-21 搜索索引 gzip 体积达标',
+    gzipSync(searchBuf).length <= 24 * 1024,
+    `${gzipSync(searchBuf).length} B ≤ ${24 * 1024} B（改前 26546，500 字档实测 22629）`,
+  );
+
+  const idx = JSON.parse(searchBody);
+  check('T-21 搜索索引条目数不变', idx.length === 32, `${idx.length} 篇`);
+
+  // 截断真的生效了：至少一篇 content 长度恰好等于 500（说明 slice 命中上限）
+  const atLimit = idx.filter((p) => p.content.length === 500).length;
+  check('T-21 正文截断生效', atLimit > 0, `${atLimit} 篇长度恰好 500（上限为 500）`);
+
+  // 反向守卫：没有任何一篇超过 500，否则说明 CONTENT_LIMIT 被改回去了
+  const overLimit = idx.filter((p) => p.content.length > 500).length;
+  check('T-21 无正文超上限', overLimit === 0, `${overLimit} 篇超过 500 字`);
+
+  // 短文不该被误伤：hello-world 正文 446 字 < 500，必须原样保留
+  const shortPost = idx.find((p) => p.slug === 'hello-world');
+  check(
+    'T-21 短文不被截断',
+    !!shortPost && shortPost.content.length > 400 && shortPost.content.length < 500,
+    shortPost ? `hello-world = ${shortPost.content.length} 字` : 'hello-world 缺失',
+  );
+}
+
 // ---- 结构化数据 / 无障碍 / 图片优先级（T-09 固化本次审计成果）----
 // 这三项都是"不会让任何功能失败"的缺陷类型：JSON-LD 缺失、live region 缺失、
 // 首图懒加载，页面看起来与功能上都完全正常。所以只能靠断言守。
@@ -1207,25 +1247,32 @@ for (const path of ['/about/', '/search/']) {
   check('构建产物无未压缩 jpg/gif', distImgs.length === 0, distImgs.slice(0, 3).join(',') || '0 个');
 }
 
-// ③ 归档页总阅读时长：必须等于逐篇 readingTime 之和，不能是平均值估算
+// ③ 归档页总阅读时长：必须等于逐篇 readingTime 之和，不能是平均值估算。
+// 口径变更（T-21）：这段原先用 search.json 的 content 独立重算，但 T-21 把索引正文
+// 截断到前 500 字后，两者口径不再等价（页面用 post.body 全文，search.json 只有前 500 字），
+// 重算值会系统性偏小（实测 47 vs 页面 56，ratio 0.84 → 假红）。
+// 改为直接读 Markdown 源文件、剥掉 frontmatter 后用同一公式重算，与页面同源。
+// 前提：getPublishedPosts() 在 PROD 下会滤掉 draft 与未来日期文章；当前 32 篇全为已发布，
+// 若将来出现 draft，这里会多算，届时需要同步过滤 frontmatter（届时断言会先红，是好事）。
 {
   const archiveHtml = await (await fetch(BASE + '/archive/')).text();
   const m = /读完约\s*(\d+)\s*分钟/.exec(archiveHtml);
   const shown = m ? Number(m[1]) : null;
 
-  // 独立重算：从 search.json 的正文重算（与页面用的是同一个 readingTime 公式）
-  const searchIndex = await (await fetch(BASE + '/search.json')).json();
-  const calc = searchIndex.reduce((n, p) => {
-    const cjk = (p.content.match(/[\u4e00-\u9fff]/g) || []).length;
-    const words = (p.content.match(/[A-Za-z0-9]+/g) || []).length;
-    return n + Math.max(1, Math.ceil(cjk / 400 + words / 200));
-  }, 0);
-  // search.json 的 content 是从 Markdown 抽的纯文本，与 post.body 口径可能略有差异，
-  // 因此只要求"同一数量级且不相差 10% 以上"——重点是防止"写成固定值/写错公式"。
-  const ratio = shown ? calc / shown : 0;
+  const postsDir = join(ROOT, 'src', 'content', 'posts');
+  const calc = readdirSync(postsDir)
+    .filter((f) => f.endsWith('.md'))
+    .reduce((n, f) => {
+      const raw = readFileSync(join(postsDir, f), 'utf8');
+      const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+      const cjk = (body.match(/[\u4e00-\u9fff]/g) ?? []).length;
+      const words = (body.match(/[A-Za-z0-9]+/g) ?? []).length;
+      return n + Math.max(1, Math.ceil(cjk / 400 + words / 200));
+    }, 0);
+
   check(
-    '归档页阅读时长与逐篇累计一致（±10%）',
-    shown !== null && shown > 0 && ratio > 0.9 && ratio < 1.1,
+    '归档页阅读时长与逐篇累计一致',
+    shown !== null && shown === calc,
     '页面=' + shown + ' 独立重算=' + calc,
   );
   check('归档页阅读时长不是固定值', shown !== null && shown !== 1 && shown !== 100, String(shown));
