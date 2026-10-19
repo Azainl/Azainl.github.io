@@ -1608,6 +1608,158 @@ for (const path of ['/about/', '/search/']) {
   );
 }
 
+// ---- T-29 启用 updated：修订时间要贯穿四个出口（2026-10-19）----
+// 背景：updated 字段一直存在、PostLayout 也一直在渲染，但全站 0 篇使用，
+// 所以「有 updated 时会发生什么」这条路径从来没有被走过（④ 修订记录只测了
+// 无 updated 的 hello-world）。这里按「一处数据，四个出口」补齐：
+//   frontmatter → 文章页「更新于」/ 页脚「最后修订」/ JSON-LD dateModified /
+//   sitemap lastmod / RSS lastBuildDate
+// 口径：不硬编码篇数与日期，而是「找出真的设了 updated 的文章，再逐项对拍」，
+// 这样将来增删文章不需要改断言。
+{
+  const postsDir = join(ROOT, 'src/content/posts');
+  const revised = []; // { slug, date, updated }
+  let latest = ''; // 全站最新 lastModified —— 含未修订文章，它们取 date
+  for (const f of readdirSync(postsDir)) {
+    if (!f.endsWith('.md')) continue;
+    const src = readFileSync(join(postsDir, f), 'utf8');
+    const get = (k) => (new RegExp('^' + k + '\\s*:\\s*["\']?([^"\'\\n]+)', 'm').exec(src) || [])[1];
+    const date = (get('date') || '').trim();
+    const updated = (get('updated') || '').trim();
+    // 与 src/utils/posts.ts 的 lastModified() 同口径：updated 严格更新才生效
+    const modified = updated && updated > date ? updated : date;
+    if (modified > latest) latest = modified;
+    // 只把「真的修订过」的文章放进 revised，供逐项对拍
+    if (!date || !updated || !(updated > date)) continue;
+    revised.push({ slug: f.replace(/\.md$/, ''), date, updated });
+  }
+
+  check('T-29 有文章启用了 updated', revised.length >= 3, `${revised.length} 篇：${revised.map((r) => r.slug).join(', ')}`);
+
+  // ① 文章页：「更新于」只在修订后出现，且带修订日期
+  const metaBad = [];
+  for (const r of revised) {
+    const html = await (await fetch(`${BASE}/posts/${r.slug}/`)).text();
+    const meta = (/<p class="post-meta">[\s\S]*?<\/p>/.exec(html) || [''])[0];
+    const want = `更新于 <time datetime="${r.updated}T00:00:00.000Z"`;
+    if (!meta.includes(want)) metaBad.push(`${r.slug} 缺「${want}」`);
+  }
+  check('T-29 修订过的文章页显示更新于', metaBad.length === 0, metaBad.slice(0, 3).join(' | ') || `${revised.length} 篇已核对`);
+
+  // ② 页脚修订记录：首发 + 最后修订两段都在，且最后修订值等于 updated
+  const revBad = [];
+  for (const r of revised) {
+    const html = await (await fetch(`${BASE}/posts/${r.slug}/`)).text();
+    const seg = (/<p class="post-revision">[\s\S]*?<\/p>/.exec(html) || [''])[0];
+    if (!seg.includes('首次发布') || !seg.includes('最后修订')) revBad.push(`${r.slug} 缺段`);
+    else if (!seg.includes(`最后修订<time datetime="${r.updated}T00:00:00.000Z"`)) revBad.push(`${r.slug} 最后修订日期不对`);
+  }
+  check('T-29 页脚修订记录含首次发布与最后修订', revBad.length === 0, revBad.slice(0, 3).join(' | ') || `${revised.length} 篇已核对`);
+
+  // ③ 未修订的文章不得凭空多出「更新于」——防「用 date 兜底 updated」这种假实现
+  const never = (await (async () => {
+    const all = readdirSync(postsDir).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, ''));
+    return all.filter((s) => !revised.some((r) => r.slug === s));
+  })());
+  const probe = 'hello-world';
+  if (never.includes(probe)) {
+    const html = await (await fetch(`${BASE}/posts/${probe}/`)).text();
+    const meta = (/<p class="post-meta">[\s\S]*?<\/p>/.exec(html) || [''])[0];
+    check('T-29 未修订的文章不显示更新于', !meta.includes('更新于'), probe);
+  }
+
+  // ④ JSON-LD dateModified 必须等于 updated（不是 date）
+  const ldBound = [];
+  for (const r of revised) {
+    const html = await (await fetch(`${BASE}/posts/${r.slug}/`)).text();
+    const ld = (/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/.exec(html) || ['', ''])[1];
+    let ok = false;
+    try {
+      const nodes = [];
+      const walk = (x) => {
+        if (!x || typeof x !== 'object') return;
+        if (Array.isArray(x)) return x.forEach(walk);
+        nodes.push(x);
+        Object.values(x).forEach(walk);
+      };
+      walk(JSON.parse(ld));
+      const post = nodes.find((n) => n.dateModified && n.datePublished);
+      ok = !!post && post.dateModified === `${r.updated}T00:00:00.000Z` && post.datePublished === `${r.date}T00:00:00.000Z`;
+      if (!ok) ldBound.push(`${r.slug} dateModified=${post?.dateModified}`);
+    } catch {
+      ldBound.push(`${r.slug} JSON-LD 解析失败`);
+    }
+  }
+  check('T-29 JSON-LD dateModified 跟随 updated', ldBound.length === 0, ldBound.slice(0, 3).join(' | ') || `${revised.length} 篇已核对`);
+
+  // ⑤ sitemap lastmod 与 ⑥ RSS lastBuildDate：两者都取「全站最新修订时间」
+  //    sitemap 走 astro.config.mjs 的 readPosts()（pick('updated') || pick('date')），
+  //    RSS 走 src/utils/feed.ts 的 feedLastBuildDate()，两条独立链路都要对拍。
+  const smUrl = await (await fetch(`${BASE}/sitemap-index.xml`)).text();
+  // 注意：sitemap-index.xml 里的 <loc> 是线上绝对地址，不能直接 fetch ——
+  // 静态检查必须打在本地 preview 上（也顺带避免本地证书链不认导致 TLS 失败）。
+  const smLoc = (/<loc>([^<]+)<\/loc>/.exec(smUrl) || [])[1];
+  const smPath = smLoc ? new URL(smLoc).pathname : '';
+  const smText2 = smPath ? await (await fetch(BASE + smPath)).text() : '';
+  const smMiss = [];
+  for (const r of revised) {
+    const entry = new RegExp(`/posts/${r.slug}/</loc><lastmod>([^<]+)</lastmod>`).exec(smText2);
+    if (!entry) smMiss.push(`${r.slug} 无 lastmod`);
+    else if (entry[1] !== `${r.updated}T00:00:00.000Z`) smMiss.push(`${r.slug} lastmod=${entry[1]}`);
+  }
+  check('T-29 sitemap lastmod 跟随 updated', smMiss.length === 0, smMiss.slice(0, 3).join(' | ') || `${revised.length} 篇已核对`);
+
+  // lastBuildDate 取的是「全站最新 lastModified」（feedLastBuildDate 由 lastModified 归约而来），
+  // 而不是「最新 updated」——未修订文章的 date 也参与比较，这里必须同口径，否则会算出
+  // 2026-10-08（最新一篇的 date）与 2026-09-30（最新修订）这种假红。
+  const lbd = (/<lastBuildDate>([^<]+)<\/lastBuildDate>/.exec(rssText) || [])[1];
+  const lbdIso = lbd ? new Date(lbd).toISOString().slice(0, 10) : '';
+  check('T-29 RSS lastBuildDate 取自最新修订时间', !!latest && lbdIso === latest, `${lbdIso} vs ${latest}`);
+
+  // ⑦ 子 feed 的 lastBuildDate 同样走 feedLastBuildDate()（lastModified 口径）。
+  //    主 feed 那条只证明「最大值对得上」，证明不了「updated 参与比较」——
+  //    因为全站最新的那篇恰好没有 updated。要证明 updated 真的进了归约，
+  //    必须找一个「该标签最新一篇有 updated、且它的 date 比别的篇晚」的标签：
+  //    只有这种标签的 max(date) 与 max(modified) 不相等，两种口径才会分出胜负。
+  //    这里动态算出「可判别」的标签，不硬编码是哪一个。
+  const tagMetaSrc = readFileSync(join(ROOT, 'src/data/tags.ts'), 'utf8');
+  const nameToSlug = new Map();
+  for (const m of tagMetaSrc.matchAll(/\{\s*name:\s*'([^']+)'\s*,\s*slug:\s*'([^']+)'/g)) nameToSlug.set(m[1], m[2]);
+  const perTag = new Map(); // slug -> { date, modified } 最大值
+  for (const f of readdirSync(postsDir)) {
+    if (!f.endsWith('.md')) continue;
+    const src = readFileSync(join(postsDir, f), 'utf8');
+    const get = (k) => (new RegExp('^' + k + '\\s*:\\s*["\']?([^"\'\\n]+)', 'm').exec(src) || [])[1];
+    const date = (get('date') || '').trim();
+    const updated = (get('updated') || '').trim();
+    const modified = updated && updated > date ? updated : date;
+    const arr = (/^tags:\s*\[([^\]]*)\]/m.exec(src) || [])[1] || '';
+    for (const raw of arr.split(',')) {
+      const name = raw.trim().replace(/^["']|["']$/g, '');
+      const slug = nameToSlug.get(name);
+      if (!slug) continue;
+      const cur = perTag.get(slug) || { date: '', modified: '' };
+      if (date > cur.date) cur.date = date;
+      if (modified > cur.modified) cur.modified = modified;
+      perTag.set(slug, cur);
+    }
+  }
+  const discriminating = [...perTag.entries()].filter(([, v]) => v.modified > v.date);
+  const subBad = [];
+  for (const [slug, v] of discriminating) {
+    const xml = await (await fetch(`${BASE}/rss/tag/${slug}.xml`)).text();
+    const got = (/<lastBuildDate>([^<]+)<\/lastBuildDate>/.exec(xml) || [])[1];
+    const gotIso = got ? new Date(got).toISOString().slice(0, 10) : '';
+    if (gotIso !== v.modified) subBad.push(`${slug} ${gotIso}≠${v.modified}（date 口径会是 ${v.date}）`);
+  }
+  check(
+    'T-29 子 feed lastBuildDate 也跟随 updated',
+    discriminating.length > 0 && subBad.length === 0,
+    subBad.slice(0, 3).join(' | ') || `${discriminating.length} 个可判别标签：${discriminating.map(([s]) => s).join(', ')}`,
+  );
+}
+
+
 // ---- 内容侧工程化（P1-4）：OG 图覆盖 / 图片管线 / 阅读时长 ----
 // 这三项的共同点：缺失时页面照样正常，只是"悄悄变差"。
 //  - 漏跑 npm run og：ogImagePath() 会回退到全站默认图，分享卡片退化但页面不报错；

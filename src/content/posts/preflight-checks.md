@@ -2,6 +2,7 @@
 title: "发布前，让脚本替我看一遍"
 description: "改完代码到按下发布之间，那段「再确认一下」的时间最容易出事。我把能写成断言的都交给了脚本。"
 date: 2026-09-14
+updated: 2026-09-30
 tags: ["流程规范", "效率", "Astro"]
 series: "Astro 博客实践"
 seriesOrder: 6
