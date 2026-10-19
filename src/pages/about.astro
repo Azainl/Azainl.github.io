@@ -1,13 +1,31 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
+import { aboutPage, breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { url } from '../utils/url';
+
+// 实测 56 个真实页中，本页是**唯一**「有 canonical、未 noindex、零结构化数据」的页面：
+// 搜索引擎知道它存在，却拿不到任何实体声明。补 AboutPage + 面包屑。
+// 字段全部来自页面上真实可见的内容（标题、描述、作者），不添加页面没有的语义。
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    aboutPage({
+      name: `关于 · ${SITE.name}`,
+      description: '关于这个博客与它的作者。',
+      path: '/about/',
+      site: Astro.site,
+    }),
+    breadcrumbList([{ path: '/', name: '首页' }, { name: '关于' }], Astro.site),
+  ],
+};
 ---
 
 <BaseLayout
   title={`关于 · ${SITE.name}`}
   description="关于这个博客与它的作者。"
 >
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   {/* 题头与正文同处一条阅读列，共用同一条左边缘（.reading，见 pages.css）。
       原先题头用 .container（58rem）、正文用 .prose（34rem），
       两个盒子都 margin:0 auto 各自居中，实测错位 192px。 */}

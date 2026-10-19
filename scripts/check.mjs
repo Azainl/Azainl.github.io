@@ -1444,12 +1444,12 @@ for (const path of ['/about/', '/search/']) {
   walkSrc(join(ROOT, 'src'));
   const allSrc = srcFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
   const rawCount = (allSrc.match(/JSON\.stringify\(jsonLd\)/g) || []).length;
-  // 1 处定义 + 6 处调用（文章页/首页/标签页/分页页/归档页/系列页）。
+  // 1 处定义 + 8 处调用（文章页/首页/标签总览/标签页/分页页/归档页/系列页/关于页）。
   // 每新增一个产出 JSON-LD 的页面，这里的下限必须同步上调 —— 否则
   // 新页面完全可以用裸 JSON.stringify 而不被发现（下限是闸门，不是描述）。
   const safeCount = (allSrc.match(/safeJsonLd\(/g) || []).length;
   check('结构化数据: 无裸 JSON.stringify(jsonLd)', rawCount === 0, `${rawCount} 处`);
-  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 7, `${safeCount} 处`);
+  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 9, `${safeCount} 处`);
   check(
     '结构化数据: safeJsonLd 转义 < > & U+2028 U+2029',
     /\\u003c/.test(allSrc) && /\\u003e/.test(allSrc) && /\\u0026/.test(allSrc) && /u2028/.test(allSrc) && /u2029/.test(allSrc),
@@ -1502,6 +1502,123 @@ for (const path of ['/about/', '/search/']) {
     check('结构化数据: 文章页 JSON-LD 块数为 1（未被数据撑成多块）', ldCount === 1, `${ldCount} 块`);
   }
 }
+
+// ---- T-24 SEO 真空缺（about / tags 总览 / 首页聚合语义）----
+// 这一组的由来：实测 56 个真实页里，about 与 tags 总览是**仅有**两个
+// 「有 canonical、未 noindex、却零结构化数据」的页面 —— 搜索引擎知道它们存在，
+// 却拿不到任何实体声明；首页则有 ld 但不含 CollectionPage，与 /page/2/ 结构不一致。
+// 这几条断言全部对着构建产物做，且判据是「真实渲染的条数」，不是「含某个字符串」。
+{
+  const ldBlocks = (html) =>
+    [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+
+  // 解析后递归收集 @type，用于判断实体类型是否真的存在（不是文本包含）
+  const collectTypes = (node, out) => {
+    if (Array.isArray(node)) {
+      node.forEach((n) => collectTypes(n, out));
+    } else if (node && typeof node === 'object') {
+      if (typeof node['@type'] === 'string') out.add(node['@type']);
+      Object.values(node).forEach((n) => collectTypes(n, out));
+    }
+    return out;
+  };
+
+  const loadLd = async (path) => {
+    const res = await fetch(`${BASE}${path}`);
+    const html = await res.text();
+    const blocks = ldBlocks(html);
+    const parsed = [];
+    for (const b of blocks) {
+      try {
+        parsed.push(JSON.parse(b));
+      } catch {
+        /* 解析失败由上面的通用断言负责计数，这里只收能解析的 */
+      }
+    }
+    const types = new Set();
+    parsed.forEach((o) => collectTypes(o, types));
+    return { ok: res.ok, blocks, parsed, types, html };
+  };
+
+  // ① about：此前 0 块。AboutPage 是 WebPage 的子类型，比笼统的 WebPage 更准。
+  {
+    const a = await loadLd('/about/');
+    check('about 页含可解析的 JSON-LD', a.ok && a.parsed.length === 1, `${a.blocks.length} 块`);
+    check(
+      'about 页声明 AboutPage + BreadcrumbList',
+      a.types.has('AboutPage') && a.types.has('BreadcrumbList'),
+      [...a.types].join(','),
+    );
+    // 面包屑末级即本页，按全站惯例不带 item（带了就等于自指，会多一环）
+    const bc = a.parsed.flatMap((o) => o['@graph'] ?? [o]).find((n) => n['@type'] === 'BreadcrumbList');
+    const last = bc?.itemListElement?.at(-1);
+    check('about 面包屑末级不自指', last?.item === undefined && last?.name === '关于', JSON.stringify(last));
+  }
+
+  // ② tags 总览：这一页渲染的是标签云，不是文章列表。
+  //    断言条数等于页面上真实渲染的标签数 —— 结构化数据必须与可见内容同源。
+  {
+    const t = await loadLd('/tags/');
+    check('标签总览页含可解析的 JSON-LD', t.ok && t.parsed.length === 1, `${t.blocks.length} 块`);
+    check(
+      '标签总览页声明 CollectionPage + BreadcrumbList',
+      t.types.has('CollectionPage') && t.types.has('BreadcrumbList'),
+      [...t.types].join(','),
+    );
+    const cp = t.parsed.flatMap((o) => o['@graph'] ?? [o]).find((n) => n['@type'] === 'CollectionPage');
+    const visibleTags = (t.html.match(/<a class="tag" href="\/tags\//g) || []).length;
+    check(
+      '标签总览: JSON-LD 标签数 === 页面渲染的标签数',
+      cp?.mainEntity?.numberOfItems === visibleTags && visibleTags > 0,
+      `ld=${cp?.mainEntity?.numberOfItems} 页面=${visibleTags}`,
+    );
+  }
+
+  // ③ 首页：CollectionPage 的条数必须等于本页真实渲染的 6 篇（PER_PAGE），
+  //    而不是全部 32 篇 —— 后者是「声明了页面上没有的内容」，是明确的作弊形态。
+  {
+    const h = await loadLd('/');
+    check('首页声明 CollectionPage', h.types.has('CollectionPage'), [...h.types].join(','));
+    const cp = h.parsed.flatMap((o) => o['@graph'] ?? [o]).find((n) => n['@type'] === 'CollectionPage');
+    // 首页列表用 .post-row 承载每一篇（见 Archive.astro），逐个数出来比对
+    const visibleRows = (h.html.match(/class="post-row /g) || []).length;
+    check(
+      '首页: ItemList 条数 === 页面渲染的文章行数',
+      cp?.mainEntity?.numberOfItems === visibleRows && visibleRows > 0,
+      `ld=${cp?.mainEntity?.numberOfItems} 页面=${visibleRows}`,
+    );
+    // WebSite + Person 两个老实体不能因为新增 CollectionPage 而被挤掉
+    check(
+      '首页仍保留 WebSite 与 Person 实体',
+      h.types.has('WebSite') && h.types.has('Person'),
+      [...h.types].join(','),
+    );
+  }
+
+  // ④ 全站扫尾：任何「可收录（有 canonical、未 noindex）」的页面都不许零结构化数据。
+  //    这条是防止将来新增页面时又漏一个 —— 单页断言照顾不到新页面。
+  {
+    const missing = [];
+    const htmlFiles = [];
+    const walkHtml = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) walkHtml(p);
+        else if (e.name.endsWith('.html')) htmlFiles.push(p);
+      }
+    };
+    walkHtml(join(ROOT, 'dist'));
+    for (const file of htmlFiles) {
+      const html = readFileSync(file, 'utf8');
+      // 重定向桩与 noindex 页不参与：它们本来就不该被收录
+      if (/http-equiv=["']refresh["']/i.test(html)) continue;
+      if (/name=["']robots["'][^>]*noindex/i.test(html)) continue;
+      if (!/application\/ld\+json/.test(html)) missing.push(file.replace(ROOT, ''));
+    }
+    check('可收录页面均含结构化数据', missing.length === 0, missing.slice(0, 3).join(' | ') || `${htmlFiles.length} 个 html`);
+  }
+}
+
 
 // ---- 页面切换动画（View Transitions）----
 // 这几项是"改了样式但看不出坏了"的典型：方向性关键帧若选择器不匹配，

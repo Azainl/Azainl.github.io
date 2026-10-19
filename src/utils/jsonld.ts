@@ -103,3 +103,84 @@ export function collectionPage(opts: {
     },
   };
 }
+
+/**
+ * 单页实体（关于页这类「一页一主题」的静态页）。
+ *
+ * 此前 about 页是 56 个真实页里**唯一**同时满足「有 canonical、未 noindex、
+ * 零结构化数据」的页面 —— 搜索引擎知道它存在，却拿不到任何实体声明。
+ *
+ * 用 AboutPage 而不是笼统的 WebPage：AboutPage 是 WebPage 的子类型，
+ * 语义更窄也更准（schema.org 明确用它标注「介绍某个人/组织/事物的页面」）。
+ * about 属性指向被介绍的人，author 沿用 SITE 口径。
+ */
+export function aboutPage(opts: {
+  name: string;
+  description: string;
+  path: string;
+  site: URL | undefined;
+}): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: opts.name,
+    description: opts.description,
+    url: absUrl(opts.path, opts.site),
+    inLanguage: SITE.locale,
+    isPartOf: webSiteRef(opts.site),
+    // 不放 email：关于页正文已经写明，没必要再交给爬虫一份结构化联系方式
+    about: {
+      '@type': 'Person',
+      name: SITE.author,
+      description: SITE.description,
+    },
+  };
+}
+
+
+/**
+ * 标签总览页（/tags/）。
+ *
+ * 与 collectionPage 的区别：那一个的主实体是「文章列表」，而这一页**渲染的是标签云**，
+ * 不是文章。结构化数据必须与可见内容一致，所以这里把 itemListElement 填成
+ * 页面上真实渲染的那 N 个标签条目（DefinedTerm），而不是硬塞 32 篇文章进去。
+ */
+export function tagIndexPage(opts: {
+  name: string;
+  description: string;
+  path: string;
+  tags: { name: string; slug: string; count: number }[];
+  postCount: number;
+  site: URL | undefined;
+}): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: opts.name,
+    description: opts.description,
+    url: absUrl(opts.path, opts.site),
+    inLanguage: SITE.locale,
+    isPartOf: webSiteRef(opts.site),
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: opts.tags.length,
+      itemListElement: opts.tags.map((tag, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        item: {
+          '@type': 'DefinedTerm',
+          name: tag.name,
+          url: absUrl(`/tags/${tag.slug}/`, opts.site),
+          // 标签条目在页面上直接显示篇数（`#{tag}<span class="count">{count}</span>`），
+          // definedTermSet 用不上，改成附带 articleCount 反而更贴近可见信息。
+          description: `${tag.count} 篇文章`,
+        },
+      })),
+    },
+    // 整站文章总数在页面副标题里写着，这里如实声明
+    about: {
+      '@type': 'Thing',
+      name: `共 ${opts.postCount} 篇文章`,
+    },
+  };
+}

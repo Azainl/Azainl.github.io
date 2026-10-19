@@ -5,6 +5,7 @@ import { Icon } from 'astro-icon/components';
 import { getPublishedPosts } from '../../utils/posts';
 import { tagSlug } from '../../data/tags';
 import { url } from '../../utils/url';
+import { breadcrumbList, safeJsonLd, tagIndexPage } from '../../utils/jsonld';
 
 const posts = await getPublishedPosts();
 const counts = new Map<string, number>();
@@ -16,12 +17,32 @@ for (const post of posts) {
 const tags = [...counts.entries()].sort(
   (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh'),
 );
+
+// 标签总览页此前是 56 个真实页里「有 canonical、未 noindex、零结构化数据」的
+// 两个页面之一（另一个是 about）。这里补上聚合语义，但与标签详情页不同：
+// 本页渲染的是**标签云**而不是文章列表，所以 itemListElement 填的是标签本身，
+// 见 utils/jsonld.ts 的 tagIndexPage()。
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    tagIndexPage({
+      name: `标签 · ${SITE.name}`,
+      description: '按标签浏览全部文章。',
+      path: '/tags/',
+      tags: tags.map(([name, count]) => ({ name, slug: tagSlug(name), count })),
+      postCount: posts.length,
+      site: Astro.site,
+    }),
+    breadcrumbList([{ path: '/', name: '首页' }, { name: '全部标签' }], Astro.site),
+  ],
+};
 ---
 
 <BaseLayout
   title={`标签 · ${SITE.name}`}
   description="按标签浏览全部文章。"
 >
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
   <div class="page-head reveal">
     <button
       class="post-back"

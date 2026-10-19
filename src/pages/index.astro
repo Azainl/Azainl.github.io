@@ -6,7 +6,7 @@ import Archive from '../components/Archive.astro';
 import { url } from '../utils/url';
 import { tagSlug, usedTagGroups } from '../data/tags';
 import { formatDate } from '../utils/formatDate';
-import { safeJsonLd } from '../utils/jsonld';
+import { collectionPage, safeJsonLd } from '../utils/jsonld';
 
 const posts = await getPublishedPosts();
 
@@ -34,6 +34,10 @@ const base = url('/');
 // 首页的结构化数据：此前只有文章页有 BlogPosting，首页什么都没有。
 // 这里声明「站点」与「作者」两个实体，让搜索引擎知道这个站是谁的。
 const siteUrl = new URL('/', Astro.site).href;
+// 首页此前只有「站点 + 作者」两个实体，没有声明「这一页本身是一个列表页」，
+// 而 /page/2/ 起的分页页都有 CollectionPage + BreadcrumbList —— 同一份列表的第 1 页
+// 反而没有聚合语义，结构不一致。这里在同一个 @graph 里补上这两项。
+// 注意 itemListElement 必须与页面上真实渲染的 6 篇一致（PER_PAGE），不能塞全部 32 篇。
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -62,6 +66,16 @@ const jsonLd = {
       // 不放 email：关于页已经写明，没必要再交给爬虫一份结构化联系方式
       description: SITE.description,
     },
+    // 首页刻意**不加** BreadcrumbList：面包屑从首页开始，首页没有上一级。
+    // 单项 BreadcrumbList 虽然语法合法，但拿不到任何富结果，属于噪音。
+    // /page/2/ 起才有「首页 → 第 N 页」这两级。
+    collectionPage({
+      name: `文章列表 · ${SITE.name}`,
+      description: '全部文章，按时间倒序排列。',
+      path: '/',
+      posts: posts.slice(0, PER_PAGE),
+      site: Astro.site,
+    }),
   ],
 };
 ---
