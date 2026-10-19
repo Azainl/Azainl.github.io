@@ -208,7 +208,9 @@
   position: absolute;
   top: calc(100% + var(--space-2));
   right: 0;
-  width: 320px;
+  /* 面板现在同时承担"搜索结果"与"页面跳转"，320px 放不下带提示文字的条目 */
+  width: 460px;
+  max-width: calc(100vw - 2rem);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -230,7 +232,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 320px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
@@ -259,6 +261,31 @@
   font-size: var(--text-xs);
   color: var(--ink-3);
   margin-top: 0.15rem;
+}
+
+/* 分组（页面 / 标签 / 系列）。listbox 只有一个，组是它的孙节点，
+   所以这里的 <ul> 需要自己清掉默认的内边距与项目符号。 */
+.search-popover-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-popover-group + .search-popover-group {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.search-popover-group-label {
+  padding: 0.35rem 0.7rem 0.15rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
 }
 
 .search-popover-empty {

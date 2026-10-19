@@ -757,6 +757,199 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   );
 }, '页头搜索-Tab 键回归');
 
+// ---- T-23 命令面板：空查询的页面跳转入口（2026-10-19）----
+// 判定标准全部落在"用户可观察的行为"上：面板里有几项、在不在同一个 listbox 里、
+// 方向键能不能跨组连续走、Home/End 是否直达两端、Esc 之后焦点与 ARIA 是否复位。
+// Ctrl/Cmd+K 必须走 CDP Input 域：本文件原有实现里它零断言，从未被真正按过。
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const pressK = async (modifiers) => {
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyDown', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, nativeVirtualKeyCode: 75, modifiers,
+    });
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyUp', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, nativeVirtualKeyCode: 75, modifiers,
+    });
+    await sleep(400);
+  };
+  const snapshot = () => evaluate(cdp, `(() => ({
+    focused: document.activeElement?.className || '',
+    focusedTag: document.activeElement?.tagName || '',
+    open: document.querySelector('.search-popover')?.classList.contains('open'),
+    expanded: document.querySelector('.header-search-input')?.getAttribute('aria-expanded'),
+    groups: [...document.querySelectorAll('.search-popover-group')].map((g) => g.getAttribute('aria-labelledby')),
+  }))()`);
+
+  // Windows 上 Ctrl=2；Mac 上 Meta=4。两个都派发，两条路径都要能开面板。
+  await pressK(2);
+  const ctrl = await snapshot();
+  check(`${label}: Ctrl+K 打开面板`, ctrl.open === true, `open=${ctrl.open}`);
+  check(
+    `${label}: Ctrl+K 后焦点在搜索框`,
+    ctrl.focused.includes('header-search-input'),
+    `${ctrl.focusedTag}.${ctrl.focused}`,
+  );
+  check(`${label}: Ctrl+K 后 aria-expanded=true`, ctrl.expanded === 'true', String(ctrl.expanded));
+
+  // Esc 收起，再试 Meta+K（Mac 的主路径）
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27,
+  });
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27,
+  });
+  await sleep(200);
+  await pressK(4);
+  const meta = await snapshot();
+  check(`${label}: Meta+K 打开面板`, meta.open === true, `open=${meta.open}`);
+  check(
+    `${label}: Meta+K 后焦点在搜索框`,
+    meta.focused.includes('header-search-input'),
+    `${meta.focusedTag}.${meta.focused}`,
+  );
+}, '搜索面板-CtrlK');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  // 聚焦但不输入：这时的面板是"入口态"，列出页面/标签/系列三组静态目标
+  const nav = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.focus();
+    await new Promise((r) => setTimeout(r, 600));
+    const popover = document.querySelector('.search-popover');
+    const list = document.getElementById('search-popover-list');
+    const options = [...document.querySelectorAll('.search-popover-item')];
+    const groups = [...document.querySelectorAll('.search-popover-group')];
+    const nav2 = await fetch('/nav.json').then((r) => r.json());
+    return {
+      open: popover?.classList.contains('open'),
+      listHidden: list?.hidden,
+      role: list?.getAttribute('role'),
+      count: options.length,
+      expected: nav2.pages.length + nav2.tags.length + nav2.series.length,
+      expectedPages: nav2.pages.length,
+      expectedTags: nav2.tags.length,
+      expectedSeries: nav2.series.length,
+      groups: groups.length,
+      groupLabels: groups.map((g) => document.getElementById(g.getAttribute('aria-labelledby'))?.textContent || ''),
+      labels: [...document.querySelectorAll('.search-popover-group-label')].map((e) => e.textContent),
+      insideList: options.every((el) => el.closest('[role=listbox]')?.id === 'search-popover-list'),
+      listboxCount: document.querySelectorAll('[role=listbox]').length,
+      ids: options.map((el) => el.id),
+      hrefs: options.map((el) => el.getAttribute('href')),
+      tabIndexes: options.map((el) => el.tabIndex),
+      ariaExpanded: document.querySelector('.header-search-input')?.getAttribute('aria-expanded'),
+    };
+  })()`);
+  check(`${label}: 空查询面板打开`, nav.open === true, `open=${nav.open}`);
+  check(`${label}: 空查询面板列出全部静态目标`, nav.count === nav.expected && nav.count > 0,
+    `${nav.count} 项 / 期望 ${nav.expected}（页面 ${nav.expectedPages} + 标签 ${nav.expectedTags} + 系列 ${nav.expectedSeries}）`);
+  check(`${label}: 分组齐全（页面/标签/系列）`, nav.groups >= 2 && nav.groupLabels.length === nav.groups,
+    `${nav.groups} 组: ${nav.groupLabels.join(' / ')}`);
+  check(`${label}: 分组标题可读`, nav.labels.join('') === '页面标签系列', nav.labels.join(' / '));
+  check(`${label}: 全站只有一个 listbox`, nav.listboxCount === 1, `${nav.listboxCount} 个`);
+  check(`${label}: 所有选项都在搜索框指向的 listbox 内`, nav.insideList === true);
+  check(`${label}: 选项 id 全局唯一`, new Set(nav.ids).size === nav.ids.length,
+    `${new Set(nav.ids).size}/${nav.ids.length} 唯一`);
+  check(`${label}: 选项仍不进 Tab 序列`, nav.tabIndexes.every((t) => t === -1), nav.tabIndexes.join(','));
+  check(`${label}: 选项 href 有效`, nav.hrefs.every((h) => typeof h === 'string' && h.startsWith('/')),
+    `${nav.hrefs.filter((h) => h && h.startsWith('/')).length}/${nav.hrefs.length}`);
+  check(`${label}: 列出后 aria-expanded=true`, nav.ariaExpanded === 'true', String(nav.ariaExpanded));
+
+  // 方向键必须跨组连续：前 8 项是页面，第 9 次 ArrowDown 应落到第一个标签上
+  const walk = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    const press = (key) => input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    const state = () => {
+      const active = document.querySelector('.search-popover-item.active');
+      if (!active) return null;
+      const group = active.closest('.search-popover-group');
+      const labelId = group?.getAttribute('aria-labelledby') || '';
+      return {
+        id: active.id,
+        group: document.getElementById(labelId)?.textContent || '',
+        desc: input.getAttribute('aria-activedescendant') || '',
+        index: [...document.querySelectorAll('.search-popover-item')].indexOf(active),
+      };
+    };
+    const seen = [];
+    for (let i = 0; i < 9; i++) { press('ArrowDown'); await new Promise((r) => setTimeout(r, 20)); seen.push(state()); }
+    press('End'); await new Promise((r) => setTimeout(r, 20));
+    const end = state();
+    press('Home'); await new Promise((r) => setTimeout(r, 20));
+    const home = state();
+    press('ArrowUp'); await new Promise((r) => setTimeout(r, 20));
+    const upAtTop = state();
+    return { seen, end, home, upAtTop, total: document.querySelectorAll('.search-popover-item').length };
+  })()`);
+  const last = walk.seen[walk.seen.length - 1];
+  check(`${label}: 方向键跨组连续`, last?.index === 8 && last?.group === '标签',
+    `第 9 次 ArrowDown → index=${last?.index} group=${last?.group}`);
+  check(`${label}: 跨组后 activedescendant 仍唯一且对齐`,
+    walk.seen.every((s, i) => s && s.desc === s.id && s.index === i),
+    walk.seen.map((s) => `${s?.index}:${s?.group}`).join(' '));
+  check(`${label}: End 直达最后一项`, walk.end?.index === walk.total - 1,
+    `index=${walk.end?.index} total=${walk.total}`);
+  check(`${label}: Home 直达第一项`, walk.home?.index === 0, `index=${walk.home?.index}`);
+  check(`${label}: 在首项再按 ArrowUp 不越界`, walk.upAtTop?.index === 0, `index=${walk.upAtTop?.index}`);
+}, '搜索面板-页面跳转');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  // Esc 只负责退出面板：输入框里的字是用户自己敲的，不该被顺手擦掉
+  const after = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.focus();
+    input.value = 'PowerShell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const beforeClose = {
+      open: document.querySelector('.search-popover').classList.contains('open'),
+      count: document.querySelectorAll('.search-popover-item').length,
+    };
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 60));
+    return {
+      beforeClose,
+      value: input.value,
+      open: document.querySelector('.search-popover').classList.contains('open'),
+      expanded: input.getAttribute('aria-expanded'),
+      desc: input.getAttribute('aria-activedescendant'),
+      activeKept: document.querySelectorAll('.search-popover-item.active').length,
+    };
+  })()`);
+  check(`${label}: 有查询时仍走正文搜索`, after.beforeClose.open && after.beforeClose.count >= 1,
+    `${after.beforeClose.count} 条`);
+  check(`${label}: Esc 后关键词保留原样`, after.value === 'PowerShell', JSON.stringify(after.value));
+  check(`${label}: Esc 后面板关闭`, after.open === false);
+  check(`${label}: Esc 后 aria-expanded 复位`, after.expanded === 'false', String(after.expanded));
+  check(`${label}: Esc 后 activedescendant 移除`, after.desc === null, String(after.desc));
+  check(`${label}: Esc 后高亮态清空`, after.activeKept === 0, `${after.activeKept} 个`);
+}, '搜索面板-Esc 复位');
+
+await runPage(`${BASE}/`, async (cdp, label) => {
+  // 页头有 transition:persist，DOM 不随导航重建 —— 弹层若只靠 onPageLoad 重置，
+  // 用户点了结果跳到新页面后会看到上一条遗留的面板。
+  const r = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.focus();
+    await new Promise((r) => setTimeout(r, 600));
+    const opened = document.querySelector('.search-popover').classList.contains('open');
+    const link = [...document.querySelectorAll('.site-nav a')].find((a) => a.getAttribute('href')?.endsWith('/tags/'));
+    if (link) link.click();
+    await new Promise((r) => setTimeout(r, 1600));
+    return {
+      opened,
+      path: location.pathname,
+      open: document.querySelector('.search-popover')?.classList.contains('open'),
+      expanded: document.querySelector('.header-search-input')?.getAttribute('aria-expanded'),
+      desc: document.querySelector('.header-search-input')?.getAttribute('aria-activedescendant'),
+    };
+  })()`);
+  check(`${label}: 导航前面板是打开的`, r.opened === true, `open=${r.opened}`);
+  check(`${label}: 客户端导航确实发生了`, r.path === '/tags/', r.path);
+  check(`${label}: 跨页后面板不残留`, r.open === false, `open=${r.open}`);
+  check(`${label}: 跨页后 aria-expanded 复位`, r.expanded === 'false', String(r.expanded));
+  check(`${label}: 跨页后 activedescendant 移除`, r.desc === null, String(r.desc));
+}, '搜索面板-跨页残留');
+
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     box: getComputedStyle(document.querySelector('.header-search')).display,
