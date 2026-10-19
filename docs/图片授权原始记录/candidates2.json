@@ -1,0 +1,44 @@
+[
+  {
+    "file": ".shots/candidates2/x00.jpg",
+    "id": "10",
+    "author": "Paul Jarvis",
+    "url": "https://unsplash.com/photos/6J--NXulQCs",
+    "bytes": 114880
+  },
+  {
+    "file": ".shots/candidates2/x01.jpg",
+    "id": "20",
+    "author": "Aleks Dorohovich",
+    "url": "https://unsplash.com/photos/nJdwUHmaY8A",
+    "bytes": 88311
+  },
+  {
+    "file": ".shots/candidates2/x02.jpg",
+    "id": "26",
+    "author": "Vadim Sherbakov",
+    "url": "https://unsplash.com/photos/tCICLJ5ktBE",
+    "bytes": 85194
+  },
+  {
+    "file": ".shots/candidates2/x03.jpg",
+    "id": "27",
+    "author": "Yoni Kaplan-Nadel",
+    "url": "https://unsplash.com/photos/iJnZwLBOB1I",
+    "bytes": 108155
+  },
+  {
+    "file": ".shots/candidates2/x04.jpg",
+    "id": "28",
+    "author": "Jerry Adney",
+    "url": "https://unsplash.com/photos/_WiFMBRT7Aw",
+    "bytes": 217627
+  },
+  {
+    "file": ".shots/candidates2/x05.jpg",
+    "id": "29",
+    "author": "Go Wild",
+    "url": "https://unsplash.com/photos/V0yAek6BgGk",
+    "bytes": 221542
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "file": ".shots/shelf/s00.jpg",
+    "title": "File:LOC Main Reading Room Highsmith.jpg",
+    "w": 6144,
+    "h": 4098,
+    "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/LOC_Main_Reading_Room_Highsmith.jpg/1280px-LOC_Main_Reading_Room_Highsmith.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "author": "Carol M. Highsmith",
+    "license": "Public domain",
+    "descUrl": "https://commons.wikimedia.org/wiki/File:LOC_Main_Reading_Room_Highsmith.jpg",
+    "term": "public library reading room",
+    "bytes": 430208
+  },
+  {
+    "file": ".shots/shelf/s01.jpg",
+    "title": "File:Taipei Public Library Hengan Neighborhood Reading Room entry 20060621.jpg",
+    "w": 2304,
+    "h": 1728,
+    "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/Taipei_Public_Library_Hengan_Neighborhood_Reading_Room_entry_20060621.jpg/1280px-Taipei_Public_Library_Hengan_Neighborhood_Reading_Room_entry_20060621.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "author": "The original uploader was Smilelee at Chinese Wikipedia.",
+    "license": "Public domain",
+    "descUrl": "https://commons.wikimedia.org/wiki/File:Taipei_Public_Library_Hengan_Neighborhood_Reading_Room_entry_20060621.jpg",
+    "term": "public library reading room",
+    "bytes": 312492
+  },
+  {
+    "file": ".shots/shelf/s02.jpg",
+    "title": "File:Chethams Library Reading Room.jpg",
+    "w": 5180,
+    "h": 3454,
+    "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/Chethams_Library_Reading_Room.jpg/1280px-Chethams_Library_Reading_Room.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "author": "Michael D Beckwith",
+    "license": "CC BY 3.0",
+    "descUrl": "https://commons.wikimedia.org/wiki/File:Chethams_Library_Reading_Room.jpg",
+    "term": "public library reading room",
+    "bytes": 307757
+  },
+  {
+    "file": ".shots/shelf/s03.jpg",
+    "title": "File:Grubbs Vocational College Library Reading Room (10003712).jpg",
+    "w": 1460,
+    "h": 1191,
+    "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Grubbs_Vocational_College_Library_Reading_Room_%2810003712%29.jpg/1280px-Grubbs_Vocational_College_Library_Reading_Room_%2810003712%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "author": "University of Texas at Arlington Photograph Collection",
+    "license": "CC BY 4.0",
+    "descUrl": "https://commons.wikimedia.org/wiki/File:Grubbs_Vocational_College_Library_Reading_Room_(10003712).jpg",
+    "term": "public library reading room",
+    "bytes": 220672
+  }
+]
