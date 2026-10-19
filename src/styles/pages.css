@@ -817,6 +817,45 @@ mark {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* 订阅页（/subscribe/）的订阅源清单。
+   复用 .prose 的排版，只补两处：清单项之间留白一档，右侧的篇数/说明
+   用无衬线小字压暗 —— 它是注解，不该和可点的地址抢注意力。 */
+.feed-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.feed-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  margin: 0.55em 0;
+}
+
+.feed-list li::marker {
+  content: none;
+}
+
+.feed-list a {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.feed-note {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+
+.feed-back {
+  margin-top: 2em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
 /* ============================================================
    页脚
    ============================================================ */

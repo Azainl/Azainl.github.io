@@ -957,6 +957,123 @@ check('站点地图存在', sitemapRes.ok);
   );
 }
 
+// ---- T-26 分发能力：子 feed / JSON Feed / 订阅页（2026-10-19）----
+// 背景：P2-3 把「一个订阅源」变成「可分发的一族订阅源」。这里只做三件事：
+//   ① 产物必须真的落盘且数量对得上（12 个标签 + 1 个系列）；
+//   ② 每个子 feed 的条数必须等于该标签/系列已发布文章数 —— 用 dist 反查，
+//      不读源码口径，避免「源码改了但产物没变」这种假绿；
+//   ③ JSON Feed 与 RSS 的日期格式不同（RFC3339 vs RFC822），必须分别校验。
+// 注意：静态构建会丢弃端点里设的 Content-Type，.xml/.json 靠扩展名定类型，
+// 所以这里不断言 Content-Type，只断言内容结构。
+{
+  const fs = await import('node:fs');
+  const distRss = join(ROOT, 'dist', 'rss');
+  const tagDir = join(distRss, 'tag');
+  const seriesDir = join(distRss, 'series');
+  const tagFiles = readdirSync(tagDir).filter((f) => f.endsWith('.xml')).sort();
+  const seriesFiles = readdirSync(seriesDir).filter((f) => f.endsWith('.xml')).sort();
+  check('T-26 标签子 feed 落盘 12 个', tagFiles.length === 12, `${tagFiles.length} 个`);
+  check('T-26 系列子 feed 落盘 1 个', seriesFiles.length === 1, seriesFiles.join(','));
+
+  // 用 dist 里的标签页目录名反查 slug → 该标签的文章页数，作为子 feed 条数的独立口径
+  const tagPageCounts = new Map();
+  for (const e of readdirSync(join(ROOT, 'dist', 'tags'), { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    const idxFile = join(ROOT, 'dist', 'tags', e.name, 'index.html');
+    if (!fs.existsSync(idxFile)) continue;
+    const html = readFileSync(idxFile, 'utf8');
+    // 中文标签的重定向桩不是真实标签页，跳过
+    if (/http-equiv=["']refresh["']/i.test(html)) continue;
+    tagPageCounts.set(e.name, (html.match(/<li class="post-row">/g) || []).length);
+  }
+
+  const mismatched = [];
+  for (const file of tagFiles) {
+    const slug = file.replace(/\.xml$/, '');
+    const xml = readFileSync(join(tagDir, file), 'utf8');
+    const n = (xml.match(/<item>/g) || []).length;
+    const expected = tagPageCounts.get(slug);
+    if (expected !== undefined && n !== expected) mismatched.push(`${slug}: feed=${n} 页面=${expected}`);
+  }
+  check('T-26 每个标签子 feed 的条数等于该标签的文章数', mismatched.length === 0, mismatched.slice(0, 3).join(' | ') || `${tagFiles.length} 个已核对`);
+
+  // 随笔：主 feed 只有 3 条（被 FEED_LIMIT 截断），子 feed 必须是全部 5 条。
+  // 这是「子 feed 存在的理由」本身 —— 若哪天退化成也截断，这条会红。
+  const essays = readFileSync(join(tagDir, 'essays.xml'), 'utf8');
+  const essaysN = (essays.match(/<item>/g) || []).length;
+  check('T-26 随笔子 feed 含全部 5 篇（不受 FEED_LIMIT 影响）', essaysN === 5, `${essaysN} 篇`);
+  const mainN = (rssText.match(/<item>/g) || []).length;
+  check('T-26 子 feed 的覆盖面大于主 feed 截断面', essaysN > 3 && mainN <= 30, `随笔 ${essaysN} / 主 feed ${mainN}`);
+
+  // 每个子 feed 都必须是「可独立订阅」的合法 feed：全文、语言、自引用、带 xmlns
+  const badFeed = [];
+  for (const file of [...tagFiles, ...seriesFiles]) {
+    const dir = tagFiles.includes(file) ? tagDir : seriesDir;
+    const xml = readFileSync(join(dir, file), 'utf8');
+    const issues = [];
+    if (!xml.includes('<content:encoded>')) issues.push('无全文');
+    if (!/<language>[^<]+<\/language>/.test(xml)) issues.push('无语言');
+    if (!/<atom:link[^>]+rel="self"/.test(xml)) issues.push('无自引用');
+    // 声明了 atom: 前缀就必须同时声明 xmlns:atom，否则是非法 XML
+    if (xml.includes('atom:link') && !xml.includes('xmlns:atom=')) issues.push('缺 xmlns:atom');
+    if (issues.length) badFeed.push(`${file}: ${issues.join('/')}`);
+  }
+  check('T-26 子 feed 结构完整（全文/语言/自引用/命名空间）', badFeed.length === 0, badFeed.slice(0, 3).join(' | ') || `${tagFiles.length + seriesFiles.length} 个`);
+
+  // 子 feed 的地址不能落到中文重定向桩上 —— 桩是 meta refresh，订阅器拿到的是 HTML 不是 XML
+  const stubFeed = [...tagFiles, ...seriesFiles].filter((f) => /[\u4e00-\u9fa5]/.test(f));
+  check('T-26 子 feed 文件名只用 slug，不含中文', stubFeed.length === 0, stubFeed.join(',') || '全部为 slug');
+
+  // ---- JSON Feed 1.1 ----
+  const jsonFeedPath = join(ROOT, 'dist', 'feed.json');
+  check('T-26 JSON Feed 已落盘', fs.existsSync(jsonFeedPath));
+  let jsonFeed = null;
+  try {
+    jsonFeed = JSON.parse(readFileSync(jsonFeedPath, 'utf8'));
+  } catch (e) {
+    check('T-26 JSON Feed 可被 JSON.parse', false, String(e).slice(0, 120));
+  }
+  if (jsonFeed) {
+    check('T-26 JSON Feed 可被 JSON.parse', true, `${jsonFeed.items?.length ?? 0} 条`);
+    check('T-26 JSON Feed 版本号为 1.1', jsonFeed.version === 'https://jsonfeed.org/version/1.1', jsonFeed.version);
+    check('T-26 JSON Feed 条数与主 feed 一致', jsonFeed.items?.length === mainN, `${jsonFeed.items?.length} vs ${mainN}`);
+    check('T-26 JSON Feed 声明语言且与站点一致', jsonFeed.language === 'zh-CN', jsonFeed.language);
+    // RFC3339 必须能被 Date 解析且含 T/Z；toUTCString() 产出的 'GMT' 格式不合规范
+    const badDate = (jsonFeed.items ?? []).filter((it) => !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(it.date_published ?? ''));
+    check('T-26 JSON Feed 的 date_published 是 RFC3339', badDate.length === 0, badDate.slice(0, 2).map((i) => i.date_published).join(' | ') || `${jsonFeed.items?.length ?? 0} 条合规`);
+    const itemsWithContent = (jsonFeed.items ?? []).filter((it) => typeof it.content_html === 'string' && it.content_html.length > 100);
+    check('T-26 JSON Feed 带全文 content_html', itemsWithContent.length === (jsonFeed.items ?? []).length, `${itemsWithContent.length}/${jsonFeed.items?.length ?? 0}`);
+    // 正文里的站内相对链接必须被绝对化，否则在阅读器里全部断链
+    const relLinks = (jsonFeed.items ?? []).flatMap((it) => (it.content_html ?? '').match(/(?:src|href)="\/(?!\/)/g) ?? []);
+    check('T-26 JSON Feed 正文链接已绝对化', relLinks.length === 0, relLinks.length + ' 条相对链接');
+    // 每条 item 的 id 与 url 必须同值（与 RSS guid 的口径一致）
+    const idMismatch = (jsonFeed.items ?? []).filter((it) => it.id !== it.url);
+    check('T-26 JSON Feed 的 id 与 url 同值', idMismatch.length === 0, idMismatch.length + ' 条不一致');
+  }
+
+  // ---- 订阅页 ----
+  const subRes = await fetch(`${BASE}/subscribe/`);
+  const subText = await subRes.text();
+  check('T-26 订阅页返回 200', subRes.ok);
+  check('T-26 订阅页列出全部 12 个标签 feed', (subText.match(/\/rss\/tag\/[a-z-]+\.xml/g) || []).length >= 12, `${(subText.match(/\/rss\/tag\/[a-z-]+\.xml/g) || []).length} 个`);
+  check('T-26 订阅页列出系列 feed', /\/rss\/series\/[a-z-]+\.xml/.test(subText));
+  check('T-26 订阅页列出 JSON Feed', /href="\/feed\.json"/.test(subText));
+  // 页脚文字链指向订阅页，图标仍是一键订阅（两者分工不同，不能都改也不能都不改）
+  const homeHtml = await (await fetch(`${BASE}/`)).text();
+  check('T-26 页脚文字链指向订阅页', homeHtml.includes('class="footer-rss-text" href="/subscribe/"'));
+  check('T-26 页脚图标仍直指 /rss.xml', /class="icon-link footer-rss-icon" href="\/rss\.xml"/.test(homeHtml));
+  // 关于页的订阅段应指向订阅页，而不是只提 RSS
+  const aboutHtml = await (await fetch(`${BASE}/about/`)).text();
+  check('T-26 关于页的订阅段指向订阅页', /href="\/subscribe\/"/.test(aboutHtml) && aboutHtml.includes('订阅'));
+
+  // 新增订阅页必须被 sitemap 收录（否则全站链接扫描覆盖不到它）；
+  // 而 feed 端点不该进 sitemap —— 它不是页面。
+  const smRes = await fetch(`${BASE}/sitemap-0.xml`);
+  const smText = await smRes.text();
+  check('T-26 订阅页被 sitemap 收录', smText.includes('/subscribe/'), `sitemap ${(smText.match(/<loc>/g) || []).length} 条`);
+  check('T-26 feed 端点不进 sitemap', !/rss\/tag\/|rss\/series\/|\/feed\.json/.test(smText));
+}
+
 const searchJsonRes = await fetch(`${BASE}/search.json`);
 check('搜索索引返回 200', searchJsonRes.ok);
 if (searchJsonRes.ok) {

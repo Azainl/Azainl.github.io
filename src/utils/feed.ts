@@ -1,6 +1,7 @@
-import type { RSSFeedItem } from '@astrojs/rss';
+import rss, { type RSSFeedItem } from '@astrojs/rss';
 import { render } from 'astro:content';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
+import { SITE } from '../consts';
 import { lastModified, type Post } from './posts';
 
 /**
@@ -138,4 +139,48 @@ export function toRssItems(
     categories: post.data.tags,
     ...(contents ? { content: contents.get(post.id) } : {}),
   }));
+}
+
+/**
+ * 组装一个完整的 RSS 响应。
+ *
+ * 主 feed（/rss.xml）与 13 个子 feed（按标签 / 按系列）只在这几个参数上不同：
+ * 文章集合、条数上限、标题、以及自引用地址。把这层差异抽成一个函数，
+ * 避免四份端点各写一遍 rss({...}) 而让字段口径（xmlns、customData、limit）
+ * 在之后的修改中悄悄漂移。
+ *
+ * `selfUrl` 给了才声明 atom 命名空间并输出 <atom:link rel="self">：
+ * 子 feed 地址不直观（/rss/tag/frontend.xml），阅读器与聚合服务靠这个字段
+ * 知道"订阅的到底是什么地址"；主 feed 的地址就是 /rss.xml，历来不加。
+ */
+export async function feedResponse({
+  site,
+  posts,
+  limit = FEED_LIMIT,
+  selfUrl,
+  title = SITE.title,
+  description = SITE.description,
+}: {
+  site: URL;
+  posts: Post[];
+  limit?: number;
+  selfUrl?: string;
+  title?: string;
+  description?: string;
+}): Promise<Response> {
+  // 只渲染真正会进 feed 的那批文章，不白烧排在 limit 之后的渲染时间。
+  const feedPosts = posts.slice(0, limit);
+  const contents = await renderContents(feedPosts, site);
+  // lastBuildDate 取**该 feed 的全部文章**（不是截断后的），
+  // 与主 feed 的口径一致：被截掉的旧文章也是这个订阅源的一部分。
+  const lastBuildDate = feedLastBuildDate(posts);
+
+  return rss({
+    title,
+    description,
+    site,
+    items: toRssItems(feedPosts, contents, site),
+    ...(selfUrl ? { xmlns: { atom: 'http://www.w3.org/2005/Atom' } } : {}),
+    customData: feedCustomData({ selfUrl, lastBuildDate }),
+  });
 }

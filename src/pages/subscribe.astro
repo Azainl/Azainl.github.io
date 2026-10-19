@@ -1,0 +1,105 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE } from '../consts';
+import { Icon } from 'astro-icon/components';
+import { TAGS, tagSlug } from '../data/tags';
+import { seriesSlug } from '../data/series';
+import { breadcrumbList, safeJsonLd } from '../utils/jsonld';
+import { url } from '../utils/url';
+import { getPublishedPosts } from '../utils/posts';
+import { getUsedSeries } from '../utils/series';
+import { FEED_LIMIT } from '../utils/feed';
+
+// 只列出**确实有文章**的标签与系列：给一个空订阅源比不给更糟，
+// 订阅者点进去拿到的是一份永远不会有新条目的 feed。
+const posts = await getPublishedPosts();
+const usedTags = new Set(posts.flatMap((post) => post.data.tags));
+const tagFeeds = TAGS.filter((tag) => usedTags.has(tag.name)).map((tag) => ({
+  name: tag.name,
+  slug: tag.slug,
+  href: `/rss/tag/${tag.slug}.xml`,
+  count: posts.filter((post) => post.data.tags.includes(tag.name)).length,
+}));
+const usedSeries = [...getUsedSeries(posts).entries()].map(([name, list]) => ({
+  name,
+  href: `/rss/series/${seriesSlug(name)}.xml`,
+  count: list.length,
+}));
+// 订阅页会被 sitemap 收录（filter 只排除 /search/），因此它必须是
+// 一个「可收录、有结构化数据」的页面 —— 全站扫描断言要求如此。
+// 主实体声明成 CollectionPage（它列出的正是这 13 份订阅源）。
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'CollectionPage',
+      name: `订阅 · ${SITE.name}`,
+      description: '这个博客的全部订阅方式。',
+      url: new URL('/subscribe/', Astro.site).href,
+      inLanguage: SITE.locale,
+    },
+    breadcrumbList([{ path: '/', name: '首页' }, { name: '订阅' }], Astro.site),
+  ],
+};
+---
+
+<BaseLayout title={`订阅 · ${SITE.name}`} description="这个博客的全部订阅方式：RSS 全站、按标签、按系列，以及 JSON Feed。">
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
+  <div class="reading">
+    <div class="page-head reveal">
+      <h1>订阅</h1>
+      <p>这个博客没有邮件列表、也没有推送通知，只有订阅源。用你习惯的阅读器订一份即可。</p>
+    </div>
+
+    <div class="prose reveal" style="--reveal-delay: 80ms">
+      <h2>全站</h2>
+      <ul class="feed-list">
+        <li>
+          <a href={url('/rss.xml')}>RSS</a>
+          <span class="feed-note">全部文章，最近 {FEED_LIMIT} 篇带全文</span>
+        </li>
+        <li>
+          <a href={url('/feed.json')}>JSON Feed</a>
+          <span class="feed-note">同样的内容，JSON 格式</span>
+        </li>
+      </ul>
+
+      <h2>只订一个标签</h2>
+      <p>每个标签都是一份独立订阅源，包含该标签下的<strong>全部</strong>文章（不限最近 30 篇）。</p>
+      <ul class="feed-list">
+        {
+          tagFeeds.map((feed) => (
+            <li>
+              <a href={url(feed.href)}>#{feed.name}</a>
+              <span class="feed-note">{feed.count} 篇</span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <h2>只订一个系列</h2>
+      <p>系列按阅读顺序排列，适合从头跟着做一遍。</p>
+      <ul class="feed-list">
+        {
+          usedSeries.map((feed) => (
+            <li>
+              <a href={url(feed.href)}>{feed.name}</a>
+              <span class="feed-note">{feed.count} 篇</span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <h2>怎么用</h2>
+      <p>
+        复制上面的地址，粘到阅读器（Feedly、Inoreader、NetNewsWire、Follow 等）的「添加订阅」里。
+        浏览器地址栏直接打开也能看到原始 XML/JSON。
+      </p>
+
+      <p class="feed-back">
+        <Icon name="arrow-left" size={15} />
+        <a href={url('/')}>回到首页</a>
+      </p>
+    </div>
+  </div>
+</BaseLayout>
