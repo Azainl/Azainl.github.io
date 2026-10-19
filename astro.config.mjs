@@ -147,9 +147,16 @@ export default defineConfig({
     // srcset/sizes，让不同 DPR 与视口各取所需；responsiveStyles 注入配套 CSS。
     layout: 'constrained',
     responsiveStyles: true,
-    // 只输出 webp：avif 需另装 @astrojs/… 才能进响应式集合，且体积优势有限
-    // （实测 46.2 KB → webp 31.1 / avif 20.2，但要付出构建时间与兼容成本）
-    // 需要时可加 'avif'，astro 会自动生成 <picture> 回退链。
+    // ⚠️ 这个配置块里**没有**输出格式的开关：格式由每个调用点决定（getImage 的
+    // format / Picture 的 formats），layout 只管版式。曾在此写过「需要时可加
+    // 'avif'，astro 会自动生成 <picture> 回退链」——那是错的，已由 T-28 实测推翻。
+    //
+    // 现状只输出 webp（astro/dist/assets/consts.js 的 DEFAULT_OUTPUT_FORMAT）。
+    // 实测 avif 确实更小：13 张源图 × 5 档合计 2318.1 → 1319.1 KB（省 43.1%），
+    // 真实单页取 828w 档平均省 14.2 KB。但 Markdown 正文图的产物由
+    // astro/dist/vite-plugin-markdown/images.js 生成，它只吐单个 <img>+srcset，
+    // 拿不到 <picture> 回退链；要铺开得改渲染管线或把 14 处正文图迁成组件。
+    // 结论：暂不做，详见 docs/后续功能开发计划.md 的 T-28 执行记录。
   },
   markdown: {
     // Markdown 图片的 sizes 默认按原图宽度生成，与 CSS 的 36rem 上限不符，
