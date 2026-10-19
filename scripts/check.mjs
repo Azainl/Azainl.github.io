@@ -941,6 +941,22 @@ check('RSS 包含文章', rssText.includes('<item>'), `${(rssText.match(/<item>/
 const sitemapRes = await fetch(`${BASE}/sitemap-index.xml`);
 check('站点地图存在', sitemapRes.ok);
 
+// ---- T-25 feed 抽取后的行为金标准（2026-10-19）----
+// 背景：rss.xml.js 的 6 段逻辑被抽到 src/utils/feed.ts，重构前后产物必须逐字节相同
+// （sha256 93b71be7… 已一次性存档比对过）。但一次性比对无法守护将来，
+// 这 4 条断言把「当前主 feed 的关键结构」固定下来，防止后续 T-26 重构悄悄丢字段。
+// 断言口径全部是「主 feed 必须有」，不看具体值 —— 值会随文章增删变化。
+{
+  check('T-25 主 feed 输出全文正文', rssText.includes('<content:encoded>'), `content:encoded ${(rssText.match(/<content:encoded>/g) || []).length} 条`);
+  check('T-25 主 feed 有 lastBuildDate', /<lastBuildDate>[^<]+<\/lastBuildDate>/.test(rssText), (rssText.match(/<lastBuildDate>([^<]+)<\/lastBuildDate>/) || [])[1] ?? '缺失');
+  check('T-25 主 feed 声明语言', /<language>zh-cn<\/language>/.test(rssText));
+  check(
+    'T-25 主 feed 条数不超过 FEED_LIMIT',
+    (rssText.match(/<item>/g) || []).length <= 30,
+    (rssText.match(/<item>/g) || []).length + ' ≤ 30',
+  );
+}
+
 const searchJsonRes = await fetch(`${BASE}/search.json`);
 check('搜索索引返回 200', searchJsonRes.ok);
 if (searchJsonRes.ok) {
