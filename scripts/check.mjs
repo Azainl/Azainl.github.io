@@ -660,6 +660,103 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: Esc 关闭`, closed === false);
 }, '页头搜索');
 
+// ---- T-22 搜索面板 Tab 键缺陷（2026-10-19）----
+// 这条缺陷肉眼完全看不出：面板里的选项是原生 <a href>，Tab 会从输入框直接跳进
+// 第 1 个结果，而 aria-activedescendant 仍指着旧值 —— 只有读屏用户能感知到不一致。
+// **必须用 CDP Input.dispatchKeyEvent**：new KeyboardEvent 是合成事件，不触发浏览器的
+// 默认 Tab 行为（焦点移动是 UA 行为，不是 JS 可合成的），所以本文件在此之前从未用过
+// Input 域。keyDown 与 keyUp 必须成对发送，否则 Chrome 会把按键当成一直按住。
+await runPage(`${BASE}/`, async (cdp, label) => {
+  // 先让搜索面板打开且有结果
+  await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.focus();
+    input.value = 'PowerShell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+  })()`);
+
+  const before = await evaluate(cdp, `(() => ({
+    open: document.querySelector('.search-popover').classList.contains('open'),
+    count: document.querySelectorAll('.search-popover-item').length,
+    tabIndexes: [...document.querySelectorAll('.search-popover-item')]
+      .map((el) => el.tabIndex),
+    focused: document.activeElement?.className || '',
+  }))()`);
+  check(`${label}: 面板已打开且有结果`, before.open && before.count >= 1,
+    `open=${before.open} count=${before.count}`);
+  check(
+    `${label}: 选项不进 Tab 序列（tabIndex 全为 -1）`,
+    before.tabIndexes.length > 0 && before.tabIndexes.every((t) => t === -1),
+    before.tabIndexes.join(','),
+  );
+  check(`${label}: Tab 前焦点在输入框`, before.focused.includes('header-search-input'), before.focused);
+
+  // 真发一次 Tab（CDP Input 域），观察焦点落到哪里、面板是否收起
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9,
+  });
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9,
+  });
+  await sleep(200);
+
+  const after = await evaluate(cdp, `(() => {
+    const a = document.activeElement;
+    return {
+      role: a?.getAttribute('role') || '',
+      cls: a?.className || '',
+      tag: a?.tagName || '',
+      open: document.querySelector('.search-popover').classList.contains('open'),
+      expanded: document.querySelector('.header-search-input')?.getAttribute('aria-expanded'),
+      activeDesc: document.querySelector('.header-search-input')?.getAttribute('aria-activedescendant') ?? null,
+    };
+  })()`);
+  check(
+    `${label}: Tab 后焦点不落在 option 上`,
+    after.role !== 'option',
+    `activeElement=${after.tag}.${after.cls} role=${after.role || '(none)'}`,
+  );
+  check(`${label}: Tab 后面板收起`, after.open === false, `open=${after.open}`);
+  check(`${label}: Tab 后 aria-expanded 复位`, after.expanded === 'false', String(after.expanded));
+  check(`${label}: Tab 后 activedescendant 已移除`, after.activeDesc === null, String(after.activeDesc));
+  check(
+    `${label}: Tab 仍能移到下一个元素（未 preventDefault）`,
+    after.tag !== 'BODY' && after.cls !== '' ,
+    `${after.tag}.${after.cls}`,
+  );
+}, '页头搜索-Tab 键');
+
+// 反向守卫：鼠标点击选项必须仍能跳转（tabindex=-1 不该影响鼠标路径）
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const href = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.focus();
+    input.value = 'PowerShell';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const first = document.querySelector('.search-popover-item');
+    return first ? first.getAttribute('href') : '';
+  })()`);
+  check(`${label}: 选项 href 仍可点击跳转`, href.startsWith('/posts/'), href);
+
+  // 方向键 + Enter 的原有路径不回归（合成 KeyboardEvent 足够：这条是 JS 逻辑不是 UA 行为）
+  const enterOk = await evaluate(cdp, `(async () => {
+    const input = document.querySelector('.header-search-input');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 60));
+    const active = document.querySelector('.search-popover-item.active');
+    const desc = input.getAttribute('aria-activedescendant');
+    return { hasActive: !!active, desc: desc || '', activeId: active?.id || '' };
+  })()`);
+  check(`${label}: 方向键仍能高亮选项`, enterOk.hasActive, JSON.stringify(enterOk));
+  check(
+    `${label}: activedescendant 与高亮项一致`,
+    enterOk.desc !== '' && enterOk.desc === enterOk.activeId,
+    `desc=${enterOk.desc} active=${enterOk.activeId}`,
+  );
+}, '页头搜索-Tab 键回归');
+
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(() => ({
     box: getComputedStyle(document.querySelector('.header-search')).display,

@@ -289,6 +289,12 @@ const links = [
           link.id = `search-opt-${i}`;
           link.setAttribute('role', 'option');
           link.setAttribute('aria-selected', 'false');
+          // combobox 模式的规范做法：选项不进 Tab 序列（WAI-ARIA APG 的 combobox 示例同样如此）。
+          // 选项是原生 <a href>，天然可聚焦；不加这行，Tab 会从输入框直接跳进第 1 个结果，
+          // 而 aria-activedescendant 仍指着旧值，读屏播报与实际焦点不一致（T-22）。
+          // 键盘用户的正确路径是方向键 + Enter，鼠标点击不受影响。
+          link.tabIndex = -1;
+
           link.href = url(`/posts/${post.slug}/`);
 
           const title = document.createElement('span');
@@ -341,6 +347,12 @@ const links = [
     container.addEventListener('search:close', () => closePopover());
 
     input.addEventListener('keydown', (event) => {
+      // Tab 是「离开这个控件」的信号：收起弹层，但**不能** preventDefault——
+      // 焦点要能正常移到下一个元素。选项既然已是 tabindex=-1，Tab 不会落进结果列表。
+      if (event.key === 'Tab') {
+        closePopover();
+        return;
+      }
       if (event.key === 'Escape') {
         input.value = '';
         closePopover();
