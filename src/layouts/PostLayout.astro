@@ -272,6 +272,34 @@ const jsonLd = {
           )
         }
       </nav>
+      {/* 分享工具条：服务端先 whole 块 hidden，脚本绑定完事件后才显示，
+          保证无 JS 时不出现两个按不动的按钮。data-url 用 canonical（服务端
+          计算好的绝对地址），而不是 location.href —— 后者可能带 ?query#hash。 */}
+      <div class="post-actions" data-post-actions hidden>
+        <button
+          class="post-action"
+          type="button"
+          data-copy-link
+          data-url={canonical}
+          data-title={post.data.title}
+          hidden
+        >
+          <Icon name="link" size={15} />
+          <span data-copy-label>复制链接</span>
+        </button>
+        <button
+          class="post-action"
+          type="button"
+          data-share
+          data-url={canonical}
+          data-title={post.data.title}
+          hidden
+        >
+          <Icon name="share-network" size={15} />
+          <span>分享</span>
+        </button>
+        <span class="sr-only" role="status" aria-live="polite" data-action-status></span>
+      </div>
       {/* 修订记录：文章页此前只在页头夹缝里写一句"更新于"，读者很难把它
           和"这是什么时候写的"对上。这里把首发与最后修订并排写清。
           非修订文章只显示首发 —— 不编造一行"从未修订"，那只是噪音。 */}
@@ -289,6 +317,8 @@ const jsonLd = {
           )
         }
       </p>
+      {/* 纸面上没有地址栏：打印时在文末补一条 canonical，方便按图索骥 */}
+      <p class="print-only print-url">原文：{canonical}</p>
       <a class="back" href={url('/')}>← 返回首页</a>
     </footer>
   </article>
@@ -444,6 +474,76 @@ const jsonLd = {
   }
 
   /**
+   * 文末分享工具条。
+   *
+   * 两个按钮在服务端都带 hidden：先绑定事件、再显示，避免无 JS 或脚本报错时
+   * 留下按不动的控件。URL 一律取服务端写好的 canonical，不用 location.href。
+   */
+  function initPostActions() {
+    const actions = document.querySelector<HTMLElement>('[data-post-actions]');
+    const copyBtn = actions?.querySelector<HTMLButtonElement>('[data-copy-link]');
+    const shareBtn = actions?.querySelector<HTMLButtonElement>('[data-share]');
+    const status = actions?.querySelector<HTMLElement>('[data-action-status]');
+    if (!actions || !copyBtn || !status) return;
+
+    const copyLabel = copyBtn.querySelector<HTMLElement>('[data-copy-label]');
+    let restoreTimer = 0;
+
+    const announce = (message: string) => {
+      // 先清空再在下一帧写入，同样的话重复触发时读屏也会再播报一次
+      status.textContent = '';
+      requestAnimationFrame(() => {
+        status.textContent = message;
+      });
+    };
+
+    const copy = async (message = '链接已复制') => {
+      try {
+        const text = copyBtn.dataset.url ?? '';
+        if (!text) throw new Error('empty canonical');
+        await navigator.clipboard.writeText(text);
+        copyBtn.classList.add('copied');
+        if (copyLabel) copyLabel.textContent = '已复制';
+        announce(message);
+        window.clearTimeout(restoreTimer);
+        restoreTimer = window.setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          if (copyLabel) copyLabel.textContent = '复制链接';
+        }, 1600);
+        return true;
+      } catch {
+        announce('复制失败，请从地址栏复制');
+        return false;
+      }
+    };
+
+    copyBtn.addEventListener('click', () => {
+      void copy();
+    });
+
+    if (shareBtn) {
+      const shareUrl = shareBtn.dataset.url ?? '';
+      const shareTitle = shareBtn.dataset.title ?? document.title;
+      if (typeof navigator.share === 'function') {
+        shareBtn.addEventListener('click', async () => {
+          try {
+            await navigator.share({ title: shareTitle, url: shareUrl });
+          } catch (error) {
+            // 用户主动取消不是错误，不打扰
+            if ((error as DOMException)?.name === 'AbortError') return;
+            const copied = await copy('分享不可用，链接已复制');
+            if (!copied) announce('分享不可用，请从地址栏复制');
+          }
+        });
+        shareBtn.hidden = false;
+      }
+    }
+
+    actions.hidden = false;
+    copyBtn.hidden = false;
+  }
+
+  /**
    * 移动端目录：点「目录」按钮滑出抽屉，再点收起；点遮罩或某条目也收起。
    * 桌面端（≥1080px）TOC 是固定的右栏，这个逻辑不生效（按钮隐藏）。
    */
@@ -486,5 +586,6 @@ const jsonLd = {
     initToc();
     initReadingProgress();
     initMobileToc();
+    initPostActions();
   });
 </script>

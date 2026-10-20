@@ -1,4 +1,5 @@
 /** 全站搜索共享逻辑：页头搜索框与 /search/ 页面共用 */
+import { TZ } from '../utils/release';
 
 /**
  * 向屏幕阅读器播报一条搜索状态（不移动焦点、不改变布局）。
@@ -55,7 +56,7 @@ export function formatDateCn(iso: string): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: 'Asia/Shanghai',
+    timeZone: TZ,
   }).format(new Date(iso));
 }
 

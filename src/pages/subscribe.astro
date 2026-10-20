@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE } from '../consts';
+import { FEED_FULLTEXT_LIMIT, SITE } from '../consts';
 import { Icon } from 'astro-icon/components';
 import { TAGS, tagSlug } from '../data/tags';
 import { seriesSlug } from '../data/series';
@@ -8,7 +8,6 @@ import { breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { url } from '../utils/url';
 import { getPublishedPosts } from '../utils/posts';
 import { getUsedSeries } from '../utils/series';
-import { FEED_FULLTEXT_LIMIT } from '../utils/feed';
 
 // 只列出**确实有文章**的标签与系列：给一个空订阅源比不给更糟，
 // 订阅者点进去拿到的是一份永远不会有新条目的 feed。

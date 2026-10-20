@@ -9,6 +9,7 @@
  * 否则面板里会出现点进去空空如也的入口。
  */
 import type { APIRoute } from 'astro';
+import { FEED_FULLTEXT_LIMIT } from '../consts';
 import { TAGS, tagSlug } from '../data/tags';
 import { SERIES, seriesSlug } from '../data/series';
 import { url } from '../utils/url';
@@ -41,7 +42,11 @@ export const GET: APIRoute = async () => {
     { label: '关于', href: url('/about/'), hint: '这个站点与作者' },
     { label: '订阅', href: url('/subscribe/'), hint: 'RSS / JSON Feed / 按标签订阅' },
     { label: '搜索', href: url('/search/'), hint: '在全部正文里找' },
-    { label: 'RSS 源', href: url('/rss.xml'), hint: '全文 RSS，最近 30 篇' },
+    {
+      label: 'RSS 源',
+      href: url('/rss.xml'),
+      hint: `全部 ${posts.length} 篇，最近 ${FEED_FULLTEXT_LIMIT} 篇全文`,
+    },
     { label: 'JSON Feed', href: url('/feed.json'), hint: '同样的内容，JSON Feed 1.1' },
   ];
 

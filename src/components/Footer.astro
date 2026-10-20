@@ -11,6 +11,15 @@ const year = new Date().getFullYear();
       © {year} {SITE.name} · 用 Astro 构建
     </p>
     <div class="footer-links">
+      {/* href 故意指向归档页：无 JS、中键或脚本失败时仍有一个可用的去处；
+          有 JS 时由 scripts/randomPost.ts 升级成「随机打开一篇」。 */}
+      <a
+        class="footer-random"
+        href={url('/archive/')}
+        data-random-post
+        data-random-src={url('/random.json')}
+        title="随机打开一篇已发布文章"
+      >随便看看</a>
       {/* 文字链指向订阅页（那里能选标签/系列/JSON Feed）；
           右侧的图标保留直指 /rss.xml —— 一键订阅仍然一步到位。 */}
       <a class="footer-rss-text" href={url('/subscribe/')}>RSS 订阅</a>
@@ -25,3 +34,7 @@ const year = new Date().getFullYear();
     </div>
   </div>
 </footer>
+
+<script>
+  import '../scripts/randomPost';
+</script>

@@ -4,13 +4,19 @@ import icon from 'astro-icon';
 import { readdirSync, readFileSync } from 'node:fs';
 import { satteri } from '@astrojs/markdown-satteri';
 import markdownImageSizes from './plugins/markdown-image-sizes.mjs';
+import { isReleased } from './src/utils/release.ts';
 
 /**
  * 构建期读一遍文章的 frontmatter，给 sitemap 提供 `lastmod`。
  *
  * 为什么要在这里读文件：`@astrojs/sitemap` 的 `serialize` 在配置加载期就要
  * 拿到日期，而 Content Collections 要等 Astro 运行时才有。这里只解析
- * frontmatter 里的 date / updated / tags 三个字段，够用且不必引入运行时依赖。
+ * frontmatter 里的 date / updated / draft / tags / series，够用且不必引入运行时依赖。
+ *
+ * ⚠️ 未发布文章必须在这里就被排除：它们不会生成页面，但若参与 `NEWEST`
+ * 计算，会把首页、归档、标签、系列的 lastmod 提前抬到未来。过滤规则必须与
+ * `src/utils/release.ts` 的放行语义一致 —— 这也是为什么这里 import 那个纯模块，
+ * 而不是再写一份 `date <= now` 的 UTC 比较。
  */
 function readPosts() {
   const dir = new URL('./src/content/posts/', import.meta.url);
@@ -21,16 +27,31 @@ function readPosts() {
     const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
     const pick = (key) =>
       new RegExp(`^${key}:\\s*"?(.*?)"?\\s*$`, 'm').exec(fm)?.[1] ?? '';
-    // 有 updated 就用 updated —— 与文章页「更新于」、RSS lastBuildDate 同一口径
-    const date = pick('updated') || pick('date');
-    if (!date) continue;
+
+    const rawDate = pick('date');
+    if (!rawDate) continue;
+    const publishedAt = new Date(rawDate);
+    if (Number.isNaN(publishedAt.valueOf())) continue;
+    // draft 与「北京时间尚未到当天」都不算已发布
+    if (pick('draft').toLowerCase() === 'true') continue;
+    if (!isReleased(publishedAt, BUILD_TIME)) continue;
+
+    // 有 updated 且确实晚于 date 才用它 —— 与文章页「更新于」、
+    // RSS lastBuildDate、src/utils/posts.ts 的 lastModified() 同一口径
+    const rawUpdated = pick('updated');
+    const updatedAt = rawUpdated ? new Date(rawUpdated) : null;
+    const lastModified =
+      updatedAt && !Number.isNaN(updatedAt.valueOf()) && updatedAt > publishedAt
+        ? rawUpdated
+        : rawDate;
+
     let tags = [];
     try {
       tags = JSON.parse(pick('tags') || '[]');
     } catch {}
     // series 用于给 /series/<slug>/ 页算 lastmod（该系列最新一篇的日期）
     const series = pick('series');
-    posts.push({ slug: name.replace(/\.md$/, ''), date, tags, series });
+    posts.push({ slug: name.replace(/\.md$/, ''), date: lastModified, tags, series });
   }
   return posts;
 }
@@ -55,6 +76,8 @@ function readSeriesSlugs() {
   return map;
 }
 
+// 配置加载期只取一次「现在」，保证本次构建内所有文章的放行判断使用同一时刻
+const BUILD_TIME = new Date();
 const POSTS = readPosts();
 const TAG_SLUGS = readTagSlugs();
 const SERIES_SLUGS = readSeriesSlugs();

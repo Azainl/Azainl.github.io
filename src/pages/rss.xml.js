@@ -9,7 +9,7 @@ export async function GET({ site }) {
   // 这里不再切片 —— 条目覆盖**全部**已发布文章（32/32，曾经是 30/32，
   // hello-world 与 why-i-write 因此进不了订阅流）。体积靠「只有最近
   // FEED_FULLTEXT_LIMIT 篇带 <content:encoded>、其余降级为摘要」来控制，
-  // 详见 src/utils/feed.ts 里 FEED_FULLTEXT_LIMIT 的注释。
+  // 详见 src/consts.ts 里 FEED_FULLTEXT_LIMIT 的注释。
   //
   // 主 feed 不加 atom:link self：它的地址就是 /rss.xml，第 3 方阅读器不会去
   // 解析这个字段。子 feed 才需要，因为它们的地理解析不出含义。

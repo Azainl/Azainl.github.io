@@ -9,6 +9,7 @@
     "preview": "astro preview",
     "sync": "astro sync",
     "typecheck": "tsc --noEmit",
+    "test:unit": "node --experimental-strip-types --test src/utils/release.test.ts",
     "og": "node scripts/generate-og.mjs",
     "check": "node scripts/check.mjs",
     "check:skills": "node scripts/link-skills.mjs --check",
@@ -29,7 +30,7 @@
     "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.6.0"
   },
   "overrides": {
     "source-map-js": "^1.2.2"

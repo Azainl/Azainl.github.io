@@ -15,8 +15,8 @@
  *    所以这个文件必须存在为 .json（Pages 会给 application/json）。
  */
 import type { APIRoute } from 'astro';
-import { SITE } from '../consts';
-import { FEED_FULLTEXT_LIMIT, absolutize, renderContents } from '../utils/feed';
+import { FEED_FULLTEXT_LIMIT, SITE } from '../consts';
+import { absolutize, renderContents } from '../utils/feed';
 import { getPublishedPosts, lastModified } from '../utils/posts';
 
 export const GET: APIRoute = async ({ site }) => {

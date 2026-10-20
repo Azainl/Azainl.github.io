@@ -1,0 +1,193 @@
+/* ============================================================
+   打印样式（只在 print 媒体下生效）
+   ------------------------------------------------------------
+   目标：浏览器「打印 / 另存为 PDF」时只留正文与必要元信息。
+   三条约定：
+     1. 所有规则都包在 @media print 里，屏幕端零影响；
+     2. 深色主题也强制浅色输出 —— 打印机没有「暗色纸」；
+     3. 不改正文结构，只隐藏交互控件与导航。
+   ============================================================ */
+@media print {
+  /* 页边距用毫米：与纸张绑定，不随屏幕断点变化 */
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  /* 强制浅色令牌。`.dark` 在 <html> 上（权重 0-1-0），这里用 :root 与 .dark
+     并列，且本文件最后导入，同权重下后者胜出。 */
+  :root,
+  .dark {
+    color-scheme: light;
+    --bg: #fff;
+    --bg-soft: #f5f5f5;
+    --surface: #fff;
+    --ink: #111;
+    --ink-2: #333;
+    --ink-3: #555;
+    --line: #ccc;
+    --line-strong: #999;
+    --rule: #ccc;
+    --code-bg: #f5f5f5;
+    --accent: #8a2f1b;
+    --on-accent: #fff;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* 主题切换的过渡会从深色「慢慢变白」：打印预览若在过渡途中生成，
+     就会把深色底带进纸面。打印不需要任何动效，直接钉死终点状态。 */
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* 动效层在打印时可能还没加 .is-visible；不还原就会印出半透明的正文 */
+  .js .reveal,
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /* ---- 隐藏：全站外壳、导航与所有交互控件 ---- */
+  .site-header,
+  .site-footer,
+  .skip-link,
+  .post-back,
+  .toc-toggle,
+  .toc-rail,
+  .toc-backdrop,
+  .related,
+  .post-series-nav,
+  .post-nav,
+  .post-footer .back,
+  .post-actions,
+  .code-copy {
+    display: none !important;
+  }
+
+  /* ---- 版面：去掉屏幕端的留白与宽度约束 ---- */
+  .post {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .post-header {
+    break-inside: avoid;
+    break-after: avoid;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .prose {
+    max-width: none;
+  }
+
+  .post-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+  }
+
+  .post-footer .post-revision {
+    font-size: 10pt;
+  }
+
+  /* ---- 分页控制：标题跟着内容走，块级内容不被拦腰截断 ---- */
+  .prose h2,
+  .prose h3,
+  .post-title {
+    break-after: avoid;
+  }
+
+  .prose pre,
+  .prose blockquote,
+  .prose figure,
+  .prose table,
+  .prose img {
+    break-inside: avoid;
+  }
+
+  .prose p,
+  .prose li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* 屏幕端代码块为横向滚动；纸上没有滚动条，宁可换行 */
+  .prose pre {
+    overflow: visible;
+    white-space: pre-wrap;
+    border: 1px solid #ccc;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* 代码块顶部 2.4rem 是给复制按钮留的位置，打印时没有按钮 */
+  .code-wrap .astro-code {
+    padding-top: 1.6rem;
+  }
+
+  /* 深色主题下 Shiki 走 --shiki-dark；打印一律钉回 light 变量。
+     必须带 html.dark 前缀，否则压不过 .dark .prose .astro-code（0-3-0）。 */
+  html.dark .prose .astro-code,
+  html.dark .prose .astro-code span,
+  html .prose .astro-code,
+  html .prose .astro-code span {
+    color: var(--shiki-light) !important;
+    background-color: var(--shiki-light-bg) !important;
+    font-style: var(--shiki-light-font-style) !important;
+    font-weight: var(--shiki-light-font-weight) !important;
+    text-decoration: var(--shiki-light-text-decoration) !important;
+  }
+
+  .prose .astro-code {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* 行内代码保留浅底细框，但别让深色主题的底色漏进来。
+     只匹配非 <pre> 内的 code —— 代码块里的 <code> 由 Shiki 的
+     span 着色，覆盖它会糊掉整块语法高亮。 */
+  .prose :not(pre) > code {
+    background: #f5f5f5 !important;
+    border-color: #ccc !important;
+    color: #111 !important;
+  }
+
+  /* 正文外链补上完整地址：纸上点不了链接。
+     图片链接（<a><img></a>）不追加，否则图下会多一行长 URL。 */
+  .prose a[href^='http']:not(:has(img))::after {
+    content: ' (' attr(href) ')';
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    color: #555;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  /* 表头底色在纸上经常被浏览器省掉，改用粗线区分即可 */
+  .prose th {
+    background: transparent;
+  }
+
+  /* 打印专用元素：屏幕端由 pages.css 隐藏 */
+  .print-only {
+    display: block !important;
+  }
+
+  .print-url {
+    margin: 0.8rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 9.5pt;
+    line-height: 1.5;
+    color: #333;
+    overflow-wrap: anywhere;
+  }
+}

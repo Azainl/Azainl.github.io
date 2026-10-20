@@ -1,6 +1,7 @@
 // frontmatter 里的 YYYY-MM-DD 会被解析成 UTC 午夜，渲染时必须固定时区，
 // 否则同一份源码在 UTC 的 CI 和 UTC+8 的本地会渲染出相差一天的日期。
-const TZ = 'Asia/Shanghai';
+// 时区常量与发布判断共用 release.ts，避免两处各写一份。
+import { TZ } from './release';
 
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('zh-CN', {

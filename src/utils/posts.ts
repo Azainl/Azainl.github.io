@@ -1,5 +1,6 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
 import { OG_SLUGS } from '../data/og-manifest';
+import { isReleased } from './release';
 
 export type Post = CollectionEntry<'posts'>;
 
@@ -33,13 +34,11 @@ export function ogImagePath(post: Post): string {
   return ogSlugs.has(post.id) ? `/og/${post.id}.png` : '/og.png';
 }
 
-const TZ = 'Asia/Shanghai';
-
 /**
  * 全站统一的「已发布文章」列表，替换散落在各页面里的 getCollection + sort。
  *
- * - 生产环境：排除 draft，也排除未来日期（date 大于构建时刻的文章不上线）
- * - 开发环境：只看 draft，未来日期的文章照常显示，方便本地预览定时发布
+ * - 生产环境：排除 draft，也排除尚未到北京时间的文章（按上海日历日 00:00 放行）
+ * - 开发环境：完全不过滤，draft 与未来日期的文章都显示，方便本地预览定时发布
  * - 排序：日期倒序；同日按 id（即文件名）兜底，保证不同机器上构建出的顺序一致
  */
 export async function getPublishedPosts(): Promise<Post[]> {
@@ -48,7 +47,7 @@ export async function getPublishedPosts(): Promise<Post[]> {
 
   const posts = await getCollection('posts', ({ data }) => {
     if (prod && data.draft) return false;
-    if (prod && data.date > now) return false;
+    if (prod && !isReleased(data.date, now)) return false;
     return true;
   });
 
@@ -59,7 +58,7 @@ export async function getPublishedPosts(): Promise<Post[]> {
   );
 }
 
-/** 首页「精选文章」：frontmatter 里 featured: true 的文章，按日期倒序 */
+/** 首页列表里的「推荐」标记（同时给相关文章轻微加权），不单独成块 */
 export function getFeaturedPosts(posts: Post[], limit = 3): Post[] {
   return posts.filter((post) => post.data.featured).slice(0, limit);
 }
@@ -106,5 +105,3 @@ export function getNeighbors(
     older: i < posts.length - 1 ? posts[i + 1] : null,
   };
 }
-
-export { TZ };

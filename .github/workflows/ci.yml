@@ -8,6 +8,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # GitHub 的 cron 一律按 UTC 解释：16:10 UTC = **次日** 00:10 Asia/Shanghai。
+  # 这是定时发布的唯一自动触发点；时区写错会让当天文章晚 8 小时才上线。
+  # 定时任务可能延迟几分钟到几十分钟，且仓库连续 60 天无活动会被自动停用。
+  schedule:
+    - cron: '10 16 * * *'
 
 permissions:
   contents: read
@@ -23,7 +28,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22
+          # 只写 major：setup-node 会取 22 系列最新版（当前远高于 22.6.0），
+          # 而 npm run test:unit 依赖的 --experimental-strip-types 正是 22.6.0 引入的。
+          # 不要改成 22.6 之类的小版本号——那会把补丁窗口钉死在 22.6.x。
+          # 与 package.json 的 engines.node 的一致性由 check.mjs 的 T-40 断言守护。
+          node-version: '22'
           cache: npm
 
       - run: npm ci
@@ -35,6 +44,11 @@ jobs:
       - name: 类型检查
         run: npm run typecheck
 
+      # 发布时间的边界逻辑靠纯函数单元测试兜底，不能只靠浏览器断言：
+      # 北京时间 00:00、跨年、闰日这些边界在页面上很难稳定复现。
+      - name: 单元测试（发布时间语义）
+        run: npm run test:unit
+
       # 技能目录不在版本库内（见 link-skills.mjs 说明）。CI / 干净克隆下
       # 工作区技能目录不存在，这一步会打印 SKIP 并以 0 退出；在有技能的开发机上
       # 才会真正校验链接有效性。放在构建之前，尽早暴露链接损坏。
@@ -44,7 +58,7 @@ jobs:
       - name: 构建
         run: npm run build
 
-      # check.mjs 是无头 Chrome + CDP 的浏览器回归（约 130 条断言）。
+      # check.mjs 是无头 Chrome + CDP 的浏览器回归，断言数随功能增长，不在此写死。
       # runner 自带 Chrome，只需要告诉脚本它在哪；脚本支持 CHROME_BIN 覆盖。
       - name: 启动预览服务器
         run: |

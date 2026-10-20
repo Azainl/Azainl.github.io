@@ -16,7 +16,7 @@ const posts = defineCollection({
       updated: z.coerce.date().optional(),
       tags: z.array(z.string()).default([]),
       draft: z.boolean().default(false),
-      /** 精选：首页「精选文章」区块展示用，最多 2～3 篇 */
+      /** 精选：首页列表里的「推荐」标记，同时给相关文章轻微加权；不单独成块 */
       featured: z.boolean().default(false),
       /**
        * 系列名。同一系列的文章填同一个字符串，文章页会显示

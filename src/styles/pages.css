@@ -450,6 +450,55 @@ mark {
   color: var(--ink-3);
 }
 
+/* 分享工具条：沿用目录按钮的细边框小按钮，不引入新的视觉语言。
+   放在文末 footer，不参与首屏，也不产生 CLS。 */
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.post-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2.25rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease,
+    background-color 0.15s ease;
+}
+.post-action:hover,
+.post-action:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.post-action svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  pointer-events: none;
+}
+.post-action.copied {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 打印专用元素：屏幕端不占位、不进可访问性树的视觉呈现，
+   但内容仍在 DOM 里，打印媒体下由 print.css 显示。 */
+.print-only {
+  display: none;
+}
+
 /* 上一篇 / 下一篇：纸面卡片，靠细线与底色分区，不靠阴影 */
 .post-nav {
   display: grid;
@@ -889,6 +938,18 @@ mark {
 
 .footer-links a:hover {
   color: var(--accent);
+}
+
+/* 「随便看看」是动作而不是订阅入口：用虚线下划线暗示可点，
+   与旁边朴素的 RSS 文字链区分开，但不加按钮框（页脚应保持安静）。 */
+.footer-random {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.2em;
+}
+.footer-random:hover {
+  text-decoration-color: var(--accent);
 }
 
 .footer-links .icon-link {

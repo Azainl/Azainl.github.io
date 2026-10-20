@@ -1,34 +1,8 @@
 import rss, { type RSSFeedItem } from '@astrojs/rss';
 import { render } from 'astro:content';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
-import { SITE } from '../consts';
+import { FEED_FULLTEXT_LIMIT, SITE } from '../consts';
 import { lastModified, type Post } from './posts';
-
-/**
- * 订阅源里**带全文**的文章数。
- *
- * 这里曾经是 `FEED_LIMIT = 30`，语义是「feed 里最多放 30 篇」。那条路有个
- * 隐蔽的后果：截断的是**条目**，于是排在 30 名之外的旧文章直接不进订阅流。
- * 32 篇时 `hello-world`（07-12）与 `why-i-write`（07-18）就是这么丢的 ——
- * 订阅者永远收不到它们，而 /subscribe/ 页上还写着「全部文章」。
- *
- * 现在把「条数」和「全文」拆成两件独立的事：
- *
- *   ① **条目数不设上限**，覆盖订阅源对应的全部已发布文章。RSS 条目本就该与内容
- *      集合一一对应；阅读器按 guid 去重，永远不会因为多一条而重复推送。
- *   ② **全文只给最近 FEED_FULLTEXT_LIMIT 篇**，更旧的条目降级成 `<description>`
- *      摘要（仍可点击回站内读全文）。
- *
- * 于是体积从「文章数 × 全文大小」变成「常数 + 文章数 × 摘要大小」：
- * 32 篇时 20×4087 + 12×362 + 316 ≈ **84 KB**，比旧口径 30 篇全篇全文的
- * **123 KB** 更小，而条目覆盖从 30/32 变成 32/32。
- *
- * 取 20 的依据：全文条目单条约 4 KB，20 条约 80 KB —— 正好是「阅读器一次轮询
- * 能舒服拿完」的量级；翻倍到 40 篇会让每次轮询白拉 160 KB。
- * 12 个标签与 1 个系列的已发布文章数全部 ≤ 11，因此这个阈值对子 feed
- * 天然不生效，订阅者拿到的是该标签/系列的**全量**全文。
- */
-export const FEED_FULLTEXT_LIMIT = 20;
 
 /**
  * 把正文里的站内绝对路径补成完整 URL。

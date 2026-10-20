@@ -34,7 +34,8 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22
+          # 与 ci.yml 保持一致（只写 major，取 22 系列最新）；见 ci.yml 里的说明。
+          node-version: '22'
           cache: npm
       - run: npm ci
       # .astro/ 不进版本库，先同步内容集合类型，否则类型检查会找不到 astro:content

@@ -160,7 +160,12 @@ const check = (name, ok, detail = '') => {
 
 await waitForDebugger();
 
-async function runPage(url, fn, label, { dark = false, width = 1440, height = 1000 } = {}) {
+async function runPage(
+  url,
+  fn,
+  label,
+  { dark = false, width = 1440, height = 1000, initScript = '' } = {},
+) {
   const tabRes = await fetch(
     `http://127.0.0.1:${PORT}/json/new?${encodeURIComponent(url)}`,
     { method: 'PUT' },
@@ -182,6 +187,11 @@ async function runPage(url, fn, label, { dark = false, width = 1440, height = 10
   await cdp.ready;
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
+  // 需要在页面脚本之前打桩时用（例如 Web Share API 必须在首次加载前存在，
+  // 否则按钮的监听与显隐在初始化时就已经定型）。reload 后同样会执行。
+  if (initScript) {
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
+  }
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width,
     height,
@@ -1864,6 +1874,154 @@ for (const path of ['/about/', '/search/']) {
 }
 
 
+// ---- T-34 北京时间放行 + sitemap 只统计已发布文章（2026-10-20）----
+// 两条断言都用**独立口径**：直接读 frontmatter，按固定 UTC+8 换算北京日历日，
+// 不 import src/utils/release.ts，也不复用 astro.config.mjs 的过滤逻辑。
+// 这样源码里的实现写错时，测试不会跟着一起错。
+{
+  const postsDir = join(ROOT, 'src/content/posts');
+  const beijingDay = (value) => {
+    const d = value instanceof Date ? value : new Date(value);
+    return new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  };
+  const today = beijingDay(new Date());
+  const get = (src, key) =>
+    (new RegExp('^' + key + '\\s*:\\s*["\']?([^"\'\\n]+)', 'm').exec(src) || [])[1]?.trim() || '';
+
+  const expected = [];
+  const excluded = [];
+  for (const f of readdirSync(postsDir)) {
+    if (!f.endsWith('.md')) continue;
+    const src = readFileSync(join(postsDir, f), 'utf8');
+    const slug = f.replace(/\.md$/, '');
+    const date = get(src, 'date');
+    if (!date) continue;
+    const draft = get(src, 'draft').toLowerCase() === 'true';
+    // 日期写的是未来（北京日历日）或草稿 → 不应进 sitemap
+    if (draft || beijingDay(date) > today) {
+      excluded.push(slug);
+      continue;
+    }
+    expected.push(`/posts/${slug}/`);
+  }
+
+  const smText = await (await fetch(`${BASE}/sitemap-0.xml`)).text();
+  const actual = [...smText.matchAll(/<loc>([^<]+)<\/loc>/g)]
+    .map((m) => new URL(m[1]).pathname)
+    .filter((p) => /^\/posts\/[^/]+\/$/.test(p));
+  const missing = expected.filter((p) => !actual.includes(p));
+  const extra = actual.filter((p) => !expected.includes(p));
+  check(
+    'T-34 sitemap 文章集合只含已发布文章',
+    expected.length > 0 && missing.length === 0 && extra.length === 0,
+    `期望 ${expected.length} / 实际 ${actual.length}；缺=${missing.slice(0, 3).join(',') || '无'} 多=${extra.slice(0, 3).join(',') || '无'}；排除=${excluded.length}`,
+  );
+
+  const futureLm = [];
+  for (const m of smText.matchAll(/<url>([\s\S]*?)<\/url>/g)) {
+    const loc = (/<loc>([^<]+)<\/loc>/.exec(m[1]) || [])[1];
+    const lastmod = (/<lastmod>([^<]+)<\/lastmod>/.exec(m[1]) || [])[1];
+    if (!loc || !lastmod) continue;
+    if (beijingDay(lastmod) > today) futureLm.push(`${new URL(loc).pathname}=${lastmod}`);
+  }
+  check(
+    'T-34 sitemap 不出现未来 lastmod',
+    futureLm.length === 0,
+    futureLm.slice(0, 3).join(' | ') || `全部 ≤ 北京今天 ${today}`,
+  );
+}
+
+
+// ---- T-35 每日定时 CI：未来日期文章真的能到点上线（2026-10-20）----
+// 只检查触发点存在还不够：cron 是 UTC，写成 '10 8 * * *' 依然是合法 cron，
+// 却会在北京时间 16:10 跑。这里把它换算成北京小时，拒绝「看起来有 schedule」的假修复。
+{
+  const ciSrc = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  const cron = (/schedule:\s*\n\s*-\s*cron:\s*['"]([^'"]+)['"]/.exec(ciSrc) || [])[1] || '';
+  check('T-35 CI 配置了每日定时触发', cron.length > 0, cron || '未找到 schedule.cron');
+
+  const fields = cron.trim().split(/\s+/);
+  let beijing = '';
+  if (fields.length === 5) {
+    const minute = Number(fields[0]);
+    const hour = Number(fields[1]);
+    if (Number.isInteger(minute) && Number.isInteger(hour)) {
+      beijing = `${String((hour + 8) % 24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+  }
+  check(
+    'T-35 定时 CI 在 Asia/Shanghai 00:10 运行',
+    beijing === '00:10',
+    cron ? `cron=${cron} → 北京 ${beijing || '无法解析'}` : '无 cron',
+  );
+}
+
+
+// ---- T-43 Node 版本三处对齐：package.json engines ↔ ci.yml ↔ deploy.yml（2026-10-20）----
+// `npm run test:unit` 用的是 node --experimental-strip-types，该旗标 22.6.0 才加入。
+// 只改 package.json 的 engines 不改 CI 的 node-version，就会变成「声明了要求但门禁跑在
+// 更低版本上」——本机能跑、CI 报 unknown flag。这条断言把三处拉到一起对拍：
+// 版本号写成 '22.6' / '22.6.0' / 22（数字）都能解析，但下限必须 >= engines 的下限。
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const engines = String(pkg.engines?.node ?? '');
+  const enginesMin = (/\d+(?:\.\d+){0,2}/.exec(engines) || [])[0] || '';
+  const toTriple = (v) => {
+    const parts = String(v).replace(/^v/, '').split('.');
+    while (parts.length < 3) parts.push('0');
+    return parts.slice(0, 3).map((n) => Number(n) || 0);
+  };
+  // setup-node 的 node-version 有两种写法，语义不同，不能同一种比较：
+  //   '22'    → 取 22 系列最新版（当前远高于 22.6.0），只要 major 相同就不会低于下限；
+  //   '22.6'  → 钉死 22.6.x，必须逐段比较，低于 engines 下限要报红。
+  // 所以先看写了几段：一段只比 major，两段及以上逐段比。
+  const compare = (raw, floor) => {
+    const a = String(raw).replace(/^v/, '').split('.').filter((s) => s !== '');
+    const b = toTriple(floor);
+    const x = toTriple(raw);
+    if (a.length < 2) return { ok: x[0] === b[0] || x[0] > b[0], pinned: false };
+    for (let i = 0; i < 3; i += 1) {
+      if (x[i] !== b[i]) return { ok: x[i] > b[i], pinned: true };
+    }
+    return { ok: true, pinned: true };
+  };
+  check(
+    'T-43 package.json engines.node 声明了下限',
+    enginesMin.length > 0,
+    engines || '未找到 engines.node',
+  );
+
+  for (const file of ['ci.yml', 'deploy.yml']) {
+    const src = readFileSync(join(ROOT, '.github/workflows', file), 'utf8');
+    const raw = (/node-version:\s*['"]?([0-9][0-9.]*)['"]?/.exec(src) || [])[1] || '';
+    const res = raw && enginesMin ? compare(raw, enginesMin) : { ok: false, pinned: false };
+    check(
+      `T-43 ${file} 的 node-version 不低于 engines 下限`,
+      res.ok,
+      `${file} node-version=${raw || '未找到'}（${res.pinned ? '钉死小版本' : '取该 major 最新'}）vs engines >= ${enginesMin}`,
+    );
+  }
+}
+
+
+// ---- T-36 命令面板的 RSS 提示必须与真实订阅源对拍（2026-10-20）----
+// 这条提示以前硬编码「全文 RSS，最近 30 篇」，而 feed 早已改成
+// 「全量条目 + 最近 20 篇全文」。两边各自写死就一定会再次漂移，
+// 所以期望值不取常量，而是数 /rss.xml 里真实的 <item> 与 <content:encoded>。
+{
+  const nav = await (await fetch(`${BASE}/nav.json`)).json();
+  const rssTarget = nav.pages?.find((page) => page.label === 'RSS 源');
+  const itemN = (rssText.match(/<item>/g) || []).length;
+  const fullN = (rssText.match(/<content:encoded>/g) || []).length;
+  const expectedHint = `全部 ${itemN} 篇，最近 ${fullN} 篇全文`;
+  check(
+    'T-36 命令面板 RSS 提示与真实订阅源一致',
+    itemN > 0 && rssTarget?.hint === expectedHint,
+    rssTarget ? `hint="${rssTarget.hint}" / 期望 "${expectedHint}"` : 'nav.json 中没有 RSS 源条目',
+  );
+}
+
+
 // ---- 内容侧工程化（P1-4）：OG 图覆盖 / 图片管线 / 阅读时长 ----
 // 这三项的共同点：缺失时页面照样正常，只是"悄悄变差"。
 //  - 漏跑 npm run og：ogImagePath() 会回退到全站默认图，分享卡片退化但页面不报错；
@@ -2891,6 +3049,515 @@ await runPage(
     );
   },
   '首页列表间距',
+);
+
+// ---- T-38 文末工具条：复制 canonical / 系统分享 ----
+// ① 服务端产物：无 JS 时两块都带 hidden，且 data-url 已由服务端算好
+{
+  const t38Html = await (await fetch(`${BASE}/posts/blog-build-notes/`)).text();
+  const canonical = (/<link rel="canonical" href="([^"]+)"/.exec(t38Html) || [])[1] || '';
+  const actionsSeg = (/<div class="post-actions"[\s\S]*?<\/div>/.exec(t38Html) || [''])[0];
+  const buttons = [...actionsSeg.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
+  const copyTag = buttons.find((tag) => tag.includes('data-copy-link')) || '';
+  const shareTag = buttons.find((tag) => /\bdata-share\b/.test(tag)) || '';
+  check(
+    'T-38 无 JS 时工具条与两个按钮都隐藏',
+    /<div class="post-actions"[^>]*\bhidden\b/.test(actionsSeg) &&
+      buttons.length === 2 &&
+      buttons.every((tag) => /\bhidden\b/.test(tag)),
+    `buttons=${buttons.length} hidden=${buttons.filter((t) => /\bhidden\b/.test(t)).length}`,
+  );
+  check(
+    'T-38 服务端 data-url 就是 canonical',
+    !!canonical &&
+      !!copyTag &&
+      !!shareTag &&
+      copyTag.includes(`data-url="${canonical}"`) &&
+      shareTag.includes(`data-url="${canonical}"`) &&
+      !/[?#]/.test(canonical),
+    canonical || '未找到 canonical',
+  );
+  check(
+    'T-38 工具条带 aria-live 状态区',
+    /data-action-status[^>]*aria-live="polite"/.test(actionsSeg) ||
+      /aria-live="polite"[^>]*data-action-status/.test(actionsSeg),
+    actionsSeg ? '有' : '未找到工具条',
+  );
+}
+
+// ② 浏览器交互：分享 API 必须在页面脚本执行前打桩，否则按钮不会绑定监听
+const t38Init = `
+  Object.defineProperty(navigator, 'share', {
+    configurable: true,
+    value: async (data) => { window.__shared = data; },
+  });
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    get: () => ({ writeText: async (text) => { window.__copied = text; } }),
+  });
+`;
+
+await runPage(
+  `${BASE}/posts/blog-build-notes/`,
+  async (cdp, label) => {
+    const initial = await evaluate(
+      cdp,
+      `(() => {
+        const actions = document.querySelector('[data-post-actions]');
+        const copy = document.querySelector('[data-copy-link]');
+        const share = document.querySelector('[data-share]');
+        return {
+          actionsHidden: actions?.hidden,
+          copyHidden: copy?.hidden,
+          shareHidden: share?.hidden,
+          copyTag: copy?.tagName,
+          shareTag: share?.tagName,
+          copyUrl: copy?.dataset.url || '',
+          canonical: document.querySelector('link[rel="canonical"]')?.href || '',
+          pageTitle: document.title,
+          live: !!actions?.querySelector('[data-action-status][aria-live="polite"]'),
+        };
+      })()`,
+    );
+    check(
+      `${label}: JS 就绪后复制按钮出现且可聚焦`,
+      initial.copyHidden === false &&
+        initial.actionsHidden === false &&
+        initial.copyTag === 'BUTTON' &&
+        initial.live,
+      `actions=${initial.actionsHidden} copy=${initial.copyHidden} tag=${initial.copyTag}`,
+    );
+    check(
+      `${label}: 支持 Web Share 时分享按钮出现`,
+      initial.shareHidden === false && initial.shareTag === 'BUTTON',
+      `share.hidden=${initial.shareHidden}`,
+    );
+    check(
+      `${label}: data-url 精确等于 canonical`,
+      !!initial.canonical && initial.copyUrl === initial.canonical && !/[?#]/.test(initial.copyUrl),
+      initial.copyUrl,
+    );
+
+    const copied = await evaluate(
+      cdp,
+      `(async () => {
+        const btn = document.querySelector('[data-copy-link]');
+        btn.focus();
+        btn.click();
+        await new Promise((r) => setTimeout(r, 120));
+        return {
+          text: window.__copied,
+          status: document.querySelector('[data-action-status]')?.textContent || '',
+          label: btn.querySelector('[data-copy-label]')?.textContent.trim() || '',
+          copiedClass: btn.classList.contains('copied'),
+          focused: document.activeElement === btn,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 复制写入的文本精确等于 canonical`,
+      copied.text === initial.canonical && copied.focused,
+      `copied=${copied.text} focused=${copied.focused}`,
+    );
+    check(
+      `${label}: 复制成功有 aria-live 播报与按钮反馈`,
+      copied.status === '链接已复制' && copied.label === '已复制' && copied.copiedClass,
+      `status=${copied.status} label=${copied.label}`,
+    );
+
+    await sleep(1700);
+    const restored = await evaluate(
+      cdp,
+      `(() => {
+        const btn = document.querySelector('[data-copy-link]');
+        return {
+          label: btn.querySelector('[data-copy-label]')?.textContent.trim() || '',
+          copiedClass: btn.classList.contains('copied'),
+        };
+      })()`,
+    );
+    check(
+      `${label}: 1.6 秒后复制按钮恢复`,
+      restored.label === '复制链接' && !restored.copiedClass,
+      `label=${restored.label} copied=${restored.copiedClass}`,
+    );
+
+    const shared = await evaluate(
+      cdp,
+      `(async () => {
+        document.querySelector('[data-action-status]').textContent = '';
+        document.querySelector('[data-share]').click();
+        await new Promise((r) => setTimeout(r, 120));
+        return {
+          payload: window.__shared || null,
+          status: document.querySelector('[data-action-status]')?.textContent || '',
+        };
+      })()`,
+    );
+    check(
+      `${label}: 分享调用传入 {title,url}`,
+      shared.payload?.url === initial.canonical &&
+        shared.payload?.title === initial.pageTitle.replace(/ · Azain$/, '') &&
+        shared.status === '',
+      JSON.stringify(shared.payload),
+    );
+
+    const fallback = await evaluate(
+      cdp,
+      `(async () => {
+        window.__copied = '';
+        document.querySelector('[data-action-status]').textContent = '';
+        Object.defineProperty(navigator, 'share', {
+          configurable: true,
+          value: async () => { throw new Error('share unavailable'); },
+        });
+        document.querySelector('[data-share]').click();
+        await new Promise((r) => setTimeout(r, 150));
+        return {
+          text: window.__copied,
+          status: document.querySelector('[data-action-status]')?.textContent || '',
+        };
+      })()`,
+    );
+    check(
+      `${label}: 分享失败回退复制并播报`,
+      fallback.text === initial.canonical && fallback.status.includes('分享不可用'),
+      `status=${fallback.status}`,
+    );
+
+    const aborted = await evaluate(
+      cdp,
+      `(async () => {
+        document.querySelector('[data-action-status]').textContent = '';
+        window.__copied = '';
+        Object.defineProperty(navigator, 'share', {
+          configurable: true,
+          value: async () => { throw new DOMException('cancel', 'AbortError'); },
+        });
+        document.querySelector('[data-share]').click();
+        await new Promise((r) => setTimeout(r, 150));
+        return {
+          status: document.querySelector('[data-action-status]')?.textContent || '',
+          copied: window.__copied || '',
+        };
+      })()`,
+    );
+    check(
+      `${label}: 取消分享静默不报错`,
+      aborted.status === '' && aborted.copied === '',
+      `status=${aborted.status} copied=${aborted.copied}`,
+    );
+
+    const copyFailed = await evaluate(
+      cdp,
+      `(async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          get: () => ({ writeText: async () => { throw new Error('denied'); } }),
+        });
+        document.querySelector('[data-copy-link]').click();
+        await new Promise((r) => setTimeout(r, 150));
+        return document.querySelector('[data-action-status]')?.textContent || '';
+      })()`,
+    );
+    check(
+      `${label}: 复制失败播报可操作提示`,
+      copyFailed === '复制失败，请从地址栏复制',
+      copyFailed,
+    );
+  },
+  '文章页分享工具条',
+  { initScript: t38Init },
+);
+
+// ---- T-39 随机阅读：/random.json 与页脚「随便看看」----
+// ① 数据源与 sitemap 的文章集合完全一致（draft/未来文章不得混入）
+const t39Res = await fetch(`${BASE}/random.json`);
+const t39Posts = await t39Res.json().catch(() => null);
+const t39Sitemap = await (await fetch(`${BASE}/sitemap-0.xml`)).text();
+const t39SitemapPaths = [...t39Sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)]
+  .map((m) => new URL(m[1]).pathname)
+  .filter((p) => /^\/posts\/[^/]+\/$/.test(p))
+  .sort();
+const t39Paths = Array.isArray(t39Posts)
+  ? t39Posts.map((p) => new URL(p.href, BASE).pathname).sort()
+  : [];
+{
+  const missing = t39SitemapPaths.filter((p) => !t39Paths.includes(p));
+  const extra = t39Paths.filter((p) => !t39SitemapPaths.includes(p));
+  check(
+    'T-39 /random.json 与 sitemap 文章集合一致',
+    t39Res.ok &&
+      Array.isArray(t39Posts) &&
+      t39Posts.length > 1 &&
+      missing.length === 0 &&
+      extra.length === 0,
+    `status=${t39Res.status} 条目=${t39Paths.length}/${t39SitemapPaths.length} 缺=${missing.slice(0, 3).join(',') || '无'} 多=${extra.slice(0, 3).join(',') || '无'}`,
+  );
+}
+
+// ② 无 JS 的服务端 HTML：href 是归档页，随机数据源另放在 data 属性
+{
+  const footerOf = async (path) => {
+    const html = await (await fetch(`${BASE}${path}`)).text();
+    return (/<a class="footer-random"[\s\S]*?<\/a>/.exec(html) || [''])[0];
+  };
+  const onPost = await footerOf(t39Posts?.[0] ? new URL(t39Posts[0].href, BASE).pathname : '/');
+  const onHome = await footerOf('/');
+  const ok = (tag) =>
+    /href="[^"]*\/archive\/"/.test(tag) &&
+    /\bdata-random-post\b/.test(tag) &&
+    /data-random-src="[^"]*\/random\.json"/.test(tag);
+  check(
+    'T-39 页脚退路是无 JS 可用的归档页',
+    ok(onPost) && ok(onHome),
+    `article=${ok(onPost)} home=${ok(onHome)}`,
+  );
+}
+
+// ③ 浏览器：加载时不请求；点击后不跳回当前页
+const t39Start = t39Posts?.[0]
+  ? new URL(t39Posts[0].href, BASE).pathname
+  : '/posts/hello-world/';
+const t39ExpectedTarget = t39Posts?.[1]
+  ? new URL(t39Posts[1].href, BASE).pathname
+  : '';
+await runPage(
+  `${BASE}${t39Start}`,
+  async (cdp, label) => {
+    const before = await evaluate(
+      cdp,
+      `(() => {
+        const link = document.querySelector('[data-random-post]');
+        return {
+          href: link?.getAttribute('href') || '',
+          ready: link?.dataset.ready || '',
+          randomRequests: performance.getEntriesByType('resource')
+            .filter((e) => e.name.includes('/random.json')).length,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 页面加载时不预取 random.json`,
+      before.randomRequests === 0 && before.ready === '1',
+      `requests=${before.randomRequests} ready=${before.ready}`,
+    );
+
+    const result = await evaluate(
+      cdp,
+      `(async () => {
+        Math.random = () => 0;
+        document.querySelector('[data-random-post]').click();
+        for (let i = 0; i < 40; i++) {
+          if (location.pathname !== ${JSON.stringify(t39Start)}) break;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 900));
+        return {
+          path: location.pathname,
+          randomRequests: performance.getEntriesByType('resource')
+            .filter((e) => e.name.includes('/random.json')).length,
+          hasArticle: !!document.querySelector('.post-title'),
+        };
+      })()`,
+    );
+    check(
+      `${label}: 点击后随机到另一篇文章`,
+      result.path === t39ExpectedTarget && result.hasArticle,
+      `${result.path}（期望 ${t39ExpectedTarget}）`,
+    );
+    check(
+      `${label}: 只有点击后才请求 random.json`,
+      result.randomRequests >= 1,
+      `requests=${result.randomRequests}`,
+    );
+  },
+  '随机阅读-点击',
+);
+
+// ④ 清单拉取失败：退回归档页
+await runPage(
+  `${BASE}${t39Start}`,
+  async (cdp, label) => {
+    await evaluate(
+      cdp,
+      `(() => {
+        window.fetch = () => Promise.reject(new Error('offline'));
+        document.querySelector('[data-random-post]').click();
+        return true;
+      })()`,
+    );
+    // 退路是 location.assign()，整页导航会让当前执行上下文失效；
+    // 必须在 Node 侧等新文档加载完，再单独取一次 location.pathname。
+    await sleep(2500);
+    const result = await evaluate(
+      cdp,
+      `({ path: location.pathname, hasArchive: !!document.querySelector('.archive, .archive-list, main') })`,
+    );
+    check(
+      `${label}: fetch 失败落到归档页`,
+      result.path === '/archive/' && result.hasArchive,
+      result.path,
+    );
+  },
+  '随机阅读-失败退路',
+);
+
+// ---- T-37 打印样式：只留正文，深色主题也印浅色 ----
+// 用 CDP 切换 print 媒体读取计算样式。关键在**恢复 screen**：
+// 不恢复的话后续断言会全部跑在打印版面上，得到一堆假红/假绿。
+await runPage(
+  `${BASE}/posts/blog-build-notes/`,
+  async (cdp, label) => {
+    // 屏幕端：打印专用 URL 必须不可见（它是隐藏元素，不是靠颜色藏）
+    const screenState = await evaluate(
+      cdp,
+      `(() => ({
+        urlDisplay: getComputedStyle(document.querySelector('.print-url')).display,
+        canonical: document.querySelector('link[rel="canonical"]')?.href || '',
+        dark: document.documentElement.classList.contains('dark'),
+      }))()`,
+    );
+    check(
+      `${label}: 打印专用 URL 在屏幕端隐藏`,
+      screenState.urlDisplay === 'none' && !!screenState.canonical,
+      `display=${screenState.urlDisplay} canonical=${screenState.canonical ? '有' : '无'}`,
+    );
+
+    await cdp.send('Emulation.setEmulatedMedia', {
+      media: 'print',
+      features: [{ name: 'prefers-color-scheme', value: 'dark' }],
+    });
+
+    const printed = await evaluate(
+      cdp,
+      `(() => {
+        const hiddenSelectors = [
+          '.site-header', '.site-footer', '.skip-link', '.post-back',
+          '.toc-toggle', '.toc-rail', '.toc-backdrop', '.related',
+          '.post-series-nav', '.post-nav', '.post-footer .back',
+          '.post-actions', '.code-copy',
+        ];
+        const shownSelectors = ['.prose', '.post-title', '.post-meta', '.post-revision'];
+        const state = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const s = getComputedStyle(el);
+          return { display: s.display, visibility: s.visibility, opacity: s.opacity };
+        };
+        const hiddenBad = hiddenSelectors
+          .map((sel) => ({ sel, s: state(sel) }))
+          .filter(({ s }) => !s || s.display !== 'none')
+          .map(({ sel, s }) => sel + '=' + (s ? s.display : 'missing'));
+        const shownBad = shownSelectors
+          .map((sel) => ({ sel, s: state(sel) }))
+          .filter(({ s }) => !s || s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0')
+          .map(({ sel, s }) => sel + '=' + (s ? s.display + '/' + s.visibility + '/' + s.opacity : 'missing'));
+
+        const body = getComputedStyle(document.body);
+        const url = document.querySelector('.print-url');
+        const urlStyle = url ? getComputedStyle(url) : null;
+
+        // 代码块里取一个真实 span，与 --shiki-light / --shiki-dark 的解析值对比。
+        // 探针必须挂在 span 内部：两个变量是 Shiki 写在 span 的行内样式上的，
+        // 挂到 body 上会解析失败，得到两个相同的继承色，断言就失去判别力。
+        const span = document.querySelector('.prose .astro-code span');
+        const probe = document.createElement('i');
+        probe.style.cssText = 'position:absolute;left:-9999px';
+        let light = '';
+        let dark = '';
+        if (span) {
+          span.appendChild(probe);
+          probe.style.color = 'var(--shiki-light)';
+          light = getComputedStyle(probe).color;
+          probe.style.color = 'var(--shiki-dark)';
+          dark = getComputedStyle(probe).color;
+          probe.remove();
+        }
+        const codeColor = span ? getComputedStyle(span).color : '';
+        const codeBg = span ? getComputedStyle(span).backgroundColor : '';
+
+        // 外链补 URL：临时插入一个正文外链与一个图片链接，读 ::after 后立刻移除
+        const prose = document.querySelector('.prose');
+        const a = document.createElement('a');
+        a.href = 'https://example.com/print-probe';
+        a.textContent = '外部链接';
+        prose.appendChild(a);
+        const linkAfter = getComputedStyle(a, '::after').content;
+        const imgA = document.createElement('a');
+        imgA.href = 'https://example.com/print-image';
+        imgA.innerHTML = '<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">';
+        prose.appendChild(imgA);
+        const imgAfter = getComputedStyle(imgA, '::after').content;
+        a.remove();
+        imgA.remove();
+
+        return {
+          hiddenBad, shownBad,
+          bodyBg: body.backgroundColor, bodyColor: body.color,
+          dark: document.documentElement.classList.contains('dark'),
+          urlDisplay: urlStyle?.display ?? 'missing',
+          urlText: url?.textContent.trim() ?? '',
+          canonical: document.querySelector('link[rel="canonical"]')?.href || '',
+          hasCode: !!span,
+          codeColor, codeBg, light, darkColor: dark,
+          linkAfter, imgAfter,
+        };
+      })()`,
+    );
+
+    check(
+      `${label}: 打印时隐藏页头、目录、相关文章与操作控件`,
+      printed.hiddenBad.length === 0,
+      printed.hiddenBad.slice(0, 4).join(' | ') || '全部 display:none',
+    );
+    check(
+      `${label}: 打印时保留正文与元信息`,
+      printed.shownBad.length === 0,
+      printed.shownBad.slice(0, 4).join(' | ') || '正文/标题/元信息/修订记录均可见',
+    );
+    check(
+      `${label}: 打印 URL 可见且等于 canonical`,
+      printed.urlDisplay === 'block' && printed.urlText === `原文：${printed.canonical}`,
+      `display=${printed.urlDisplay} text=${printed.urlText.slice(0, 90)}`,
+    );
+    check(
+      `${label}: 深色主题打印强制浅底深字与 Shiki light`,
+      printed.dark &&
+        printed.bodyBg === 'rgb(255, 255, 255)' &&
+        printed.bodyColor === 'rgb(17, 17, 17)' &&
+        printed.hasCode &&
+        printed.codeColor === printed.light &&
+        printed.codeColor !== printed.darkColor,
+      `dark=${printed.dark} bg=${printed.bodyBg} ink=${printed.bodyColor} code=${printed.codeColor} light=${printed.light} dark=${printed.darkColor} bg=${printed.codeBg}`,
+    );
+    check(
+      `${label}: 打印时正文外链补 URL、图片链接不补`,
+      printed.linkAfter.includes('https://example.com/print-probe') &&
+        !printed.imgAfter.includes('https://example.com/print-image'),
+      `a::after=${printed.linkAfter.slice(0, 70)} img::after=${printed.imgAfter.slice(0, 40)}`,
+    );
+
+    // 必须恢复屏幕媒体，否则后面所有断言都会在打印版面上跑
+    await cdp.send('Emulation.setEmulatedMedia', {
+      media: 'screen',
+      features: [{ name: 'prefers-color-scheme', value: 'dark' }],
+    });
+    const restored = await evaluate(
+      cdp,
+      `(() => ({
+        header: getComputedStyle(document.querySelector('.site-header')).display,
+        url: getComputedStyle(document.querySelector('.print-url')).display,
+      }))()`,
+    );
+    check(
+      `${label}: 打印断言后恢复 screen 且无样式泄漏`,
+      restored.header !== 'none' && restored.url === 'none',
+      `header=${restored.header} print-url=${restored.url}`,
+    );
+  },
+  '文章页打印',
+  { dark: true },
 );
 
 console.log(results.join('\n'));
