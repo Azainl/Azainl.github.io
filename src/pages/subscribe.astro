@@ -8,7 +8,7 @@ import { breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { url } from '../utils/url';
 import { getPublishedPosts } from '../utils/posts';
 import { getUsedSeries } from '../utils/series';
-import { FEED_LIMIT } from '../utils/feed';
+import { FEED_FULLTEXT_LIMIT } from '../utils/feed';
 
 // 只列出**确实有文章**的标签与系列：给一个空订阅源比不给更糟，
 // 订阅者点进去拿到的是一份永远不会有新条目的 feed。
@@ -56,7 +56,7 @@ const jsonLd = {
       <ul class="feed-list">
         <li>
           <a href={url('/rss.xml')}>RSS</a>
-          <span class="feed-note">全部文章，最近 {FEED_LIMIT} 篇带全文</span>
+          <span class="feed-note">全部 {posts.length} 篇，最近 {FEED_FULLTEXT_LIMIT} 篇带全文</span>
         </li>
         <li>
           <a href={url('/feed.json')}>JSON Feed</a>
@@ -65,7 +65,7 @@ const jsonLd = {
       </ul>
 
       <h2>只订一个标签</h2>
-      <p>每个标签都是一份独立订阅源，包含该标签下的<strong>全部</strong>文章（不限最近 30 篇）。</p>
+      <p>每个标签都是一份独立订阅源，包含该标签下的<strong>全部</strong>文章，而且每篇都是全文。</p>
       <ul class="feed-list">
         {
           tagFeeds.map((feed) => (

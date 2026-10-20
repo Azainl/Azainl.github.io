@@ -7,7 +7,7 @@
 import type { APIRoute, GetStaticPaths } from 'astro';
 import { SITE } from '../../../consts';
 import { seriesName, seriesSlug } from '../../../data/series';
-import { SUB_FEED_LIMIT, feedResponse } from '../../../utils/feed';
+import { feedResponse } from '../../../utils/feed';
 import { getPublishedPosts } from '../../../utils/posts';
 import { getSeriesPosts, getUsedSeries } from '../../../utils/series';
 
@@ -21,10 +21,12 @@ export const GET: APIRoute = async ({ params, site }) => {
   const name = seriesName(params.name!);
   const posts = getSeriesPosts(await getPublishedPosts(), name);
 
+  // 不传 fulltextLimit，用默认值 20 —— 本系列 7 篇，天然全量全文。
+  // 注意这里的 posts 是**升序**（阅读顺序）而非日期倒序，所以「前 N 篇」
+  // 取到的是系列开头几篇，不是最近几篇。条数超过 20 时才需要重新考虑这一点。
   return feedResponse({
     site: site!,
     posts,
-    limit: SUB_FEED_LIMIT,
     selfUrl: new URL(`/rss/series/${params.name}.xml`, site).href,
     title: `${name} · ${SITE.title}`,
     description: `「${name}」系列的全部文章，按阅读顺序排列，来自 ${SITE.title}。`,

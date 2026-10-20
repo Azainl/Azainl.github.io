@@ -2,6 +2,28 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
 import { url } from '../utils/url';
+import { getPublishedPosts } from '../utils/posts';
+import { formatDate } from '../utils/formatDate';
+import { tagSlug } from '../data/tags';
+
+// 404 曾经只有一句话加一个「回到首页」按钮 —— 用户到了错误地址，除了原路返回
+// 没有任何别的出路。但错误地址往往来自旧外链或手打错的 slug，那个意图通常是
+// 「我想找某篇文章」，所以这里补三种真正能用的出口：
+//   ① 搜索框（直接复用 /search/?q=，那条路径已有预填充 + 自动检索的断言）；
+//   ② 最近更新的几篇（贴错 slug 的人多半在找新文）；
+//   ③ 归档 / 标签 / 关于三个入口。
+// 注意本页 noindex 且不进 sitemap，所以这些新链接不会被「全站内部链接扫描」
+// 自动覆盖 —— check.mjs 里给它们单独加了可达性断言，否则等于埋了死链。
+const posts = await getPublishedPosts();
+const recent = posts.slice(0, 5);
+// 标签按「出现在多少篇文章里」排序取前 8：只给入口，不铺满整面墙。
+const tagCounts = new Map();
+for (const post of posts) {
+  for (const tag of post.data.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+}
+const topTags = [...tagCounts.entries()]
+  .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  .slice(0, 8);
 ---
 
 <BaseLayout
@@ -13,7 +35,56 @@ import { url } from '../utils/url';
   <div class="not-found reveal">
     <code>404 NOT_FOUND</code>
     <h1>页面走丢了</h1>
-    <p>你访问的地址不存在，或者文章已经被移动了。</p>
-    <a href={url('/')}>回到首页</a>
+    <p>你访问的地址不存在，或者文章已经被移动了。下面几个入口可以直接用。</p>
+
+    <form class="not-found-search" action={url('/search/')} method="get" role="search">
+      <label class="sr-only" for="not-found-q">搜索文章</label>
+      <input
+        id="not-found-q"
+        class="not-found-input"
+        type="search"
+        name="q"
+        placeholder="搜索文章…"
+        autocomplete="off"
+      />
+      <button class="not-found-submit" type="submit">搜索</button>
+    </form>
+
+    <section class="not-found-block" aria-labelledby="not-found-recent">
+      <h2 class="not-found-h2" id="not-found-recent">最近更新</h2>
+      <ul class="not-found-list">
+        {
+          recent.map((post) => (
+            <li>
+              <a href={url(`/posts/${post.id}/`)}>{post.data.title}</a>
+              <time datetime={post.data.date.toISOString()}>{formatDate(post.data.date)}</time>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="not-found-block" aria-labelledby="not-found-tags">
+      <h2 class="not-found-h2" id="not-found-tags">按标签找</h2>
+      <ul class="not-found-tags">
+        {
+          topTags.map(([name, count]) => (
+            <li>
+              <a class="tag" href={url(`/tags/${tagSlug(name)}/`)}>
+                {name}
+                <span class="count">{count}</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <nav class="not-found-pages" aria-label="常用页面">
+      <a href={url('/')}>回到首页</a>
+      <a href={url('/archive/')}>归档</a>
+      <a href={url('/tags/')}>全部标签</a>
+      <a href={url('/about/')}>关于</a>
+    </nav>
   </div>
 </BaseLayout>

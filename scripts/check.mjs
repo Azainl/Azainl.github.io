@@ -1017,12 +1017,52 @@ await runPage(`${BASE}/tags/essays/`, async (cdp, label) => {
 }, '返回按钮-标签详情直进');
 
 await runPage(`${BASE}/no-such-page/`, async (cdp, label) => {
-  const r = await evaluate(cdp, `(() => ({
-    title: document.title,
-    h1: document.querySelector('h1')?.textContent.trim(),
-  }))()`);
+  const r = await evaluate(cdp, `(() => {
+    const root = document.querySelector('.not-found');
+    const links = root ? [...root.querySelectorAll('a[href]')] : [];
+    const hrefs = [...new Set(links.map((a) => a.getAttribute('href')))];
+    const internal = hrefs.filter((h) => h && h.startsWith('/'));
+    const form = root?.querySelector('form');
+    return {
+      title: document.title,
+      h1: document.querySelector('h1')?.textContent.trim(),
+      internalCount: internal.length,
+      internal,
+      hasSearchForm: !!form && form.getAttribute('action') === '/search/' && form.getAttribute('method') === 'get',
+      hasSearchInput: !!root?.querySelector('input[name="q"]'),
+      recentCount: root ? [...root.querySelectorAll('.not-found-list a[href^="/posts/"]')].length : 0,
+      tagCount: root ? [...root.querySelectorAll('.not-found-tags a[href^="/tags/"]')].length : 0,
+      pageLinks: root ? [...root.querySelectorAll('.not-found-pages a[href]')].map((a) => a.getAttribute('href')) : [],
+      h2Count: root ? [...root.querySelectorAll('h2')].length : 0,
+    };
+  })()`);
   check(`${label}: 标题包含站点名`, r.title.includes('Azain'), r.title);
   check(`${label}: 404 文案`, r.h1 === '页面走丢了', r.h1);
+
+  // ---- T-33 404 页要有真正的出路（2026-10-20）----
+  // 改动前这一页只有 h1 + 一句话 + 一个「回到首页」链接（全文 2 个 href）。
+  // 现在的门槛：至少 10 条站内链接、5 篇最近文章、6 个标签入口、4 个常用页面，
+  // 外加一个能用的搜索框。数值都是下限，将来加内容不会红，砍内容会红。
+  check(`${label}: 站内链接不少于 10 条`, r.internalCount >= 10, `${r.internalCount} 条`);
+  check(`${label}: 提供搜索表单并指向 /search/`, r.hasSearchForm && r.hasSearchInput);
+  check(`${label}: 列出最近文章`, r.recentCount >= 5, `${r.recentCount} 篇`);
+  check(`${label}: 提供标签入口`, r.tagCount >= 6, `${r.tagCount} 个`);
+  check(
+    `${label}: 提供归档/标签/关于入口`,
+    ['/archive/', '/tags/', '/about/'].every((h) => r.pageLinks.includes(h)),
+    r.pageLinks.join(' '),
+  );
+  // 结构：两个分组标题（最近更新 / 按标签找），h2 不能为空，否则屏幕阅读器读不出分区
+  check(`${label}: 分区块有标题`, r.h2Count >= 2, `${r.h2Count} 个 h2`);
+
+  // 这些链接是本页独有的（404 不进 sitemap），全站链接扫描覆盖不到。
+  // 逐个 fetch 一次，确认没有埋死链 —— 曾经这里只有 1 个链接，想埋死链也没机会。
+  const dead = [];
+  for (const h of r.internal) {
+    const res = await fetch(`${BASE}${h}`);
+    if (!res.ok) dead.push(`${h} HTTP ${res.status}`);
+  }
+  check(`${label}: 页内链接全部可达`, dead.length === 0, dead.slice(0, 3).join(' | ') || `${r.internalCount} 条已探测`);
 }, '404页');
 
 await runPage(`${BASE}/search/`, async (cdp, label) => {
@@ -1143,10 +1183,22 @@ check('站点地图存在', sitemapRes.ok);
   check('T-25 主 feed 输出全文正文', rssText.includes('<content:encoded>'), `content:encoded ${(rssText.match(/<content:encoded>/g) || []).length} 条`);
   check('T-25 主 feed 有 lastBuildDate', /<lastBuildDate>[^<]+<\/lastBuildDate>/.test(rssText), (rssText.match(/<lastBuildDate>([^<]+)<\/lastBuildDate>/) || [])[1] ?? '缺失');
   check('T-25 主 feed 声明语言', /<language>zh-cn<\/language>/.test(rssText));
+  // T-32 改了这条的口径：从「条数 ≤ 30」变成「条数 == 全部已发布文章数」。
+  // 旧断言守护的是「截断生效」，而截断本身就是 bug —— 它守护的是一个错误行为，
+  // 所以主 feed 覆盖 30/32 时它反而是绿的。真正的守护对象是「不漏文章」。
+  // 期望值从 sitemap 的文章条目反推（独立口径，不读源码常量）。
+  const smForCount = await (await fetch(`${BASE}/sitemap-0.xml`)).text();
+  const publishedN = (smForCount.match(/<loc>[^<]*\/posts\/[^<]+<\/loc>/g) || []).length;
+  const mainItems = (rssText.match(/<item>/g) || []).length;
   check(
-    'T-25 主 feed 条数不超过 FEED_LIMIT',
-    (rssText.match(/<item>/g) || []).length <= 30,
-    (rssText.match(/<item>/g) || []).length + ' ≤ 30',
+    'T-32 主 feed 条目数等于全部已发布文章数',
+    publishedN > 0 && mainItems === publishedN,
+    `${mainItems} vs sitemap 文章页 ${publishedN}`,
+  );
+  check(
+    'T-32 主 feed 只对最近若干篇输出全文',
+    (rssText.match(/<content:encoded>/g) || []).length === 20 && mainItems > 20,
+    `content:encoded ${(rssText.match(/<content:encoded>/g) || []).length} 条 / item ${mainItems} 条`,
   );
 }
 
@@ -1190,13 +1242,22 @@ check('站点地图存在', sitemapRes.ok);
   }
   check('T-26 每个标签子 feed 的条数等于该标签的文章数', mismatched.length === 0, mismatched.slice(0, 3).join(' | ') || `${tagFiles.length} 个已核对`);
 
-  // 随笔：主 feed 只有 3 条（被 FEED_LIMIT 截断），子 feed 必须是全部 5 条。
-  // 这是「子 feed 存在的理由」本身 —— 若哪天退化成也截断，这条会红。
+  // 随笔：子 feed 必须是全部 5 条。
+  // T-32 之前这里还断言过「子 feed 覆盖面 > 主 feed 截断面」—— 那时主 feed 只留 30 条，
+  // 随笔排在后面的 2 篇进不去。现在主 feed 覆盖全部文章，那条比较失去意义，
+  // 改成更直接、也更有价值的守护：**主 feed 里必须能找到全部随笔文章**。
+  // 这条能抓住「T-32 又退回去截断条目」的回归，而旧断言抓不到。
   const essays = readFileSync(join(tagDir, 'essays.xml'), 'utf8');
   const essaysN = (essays.match(/<item>/g) || []).length;
-  check('T-26 随笔子 feed 含全部 5 篇（不受 FEED_LIMIT 影响）', essaysN === 5, `${essaysN} 篇`);
+  check('T-26 随笔子 feed 含全部 5 篇', essaysN === 5, `${essaysN} 篇`);
   const mainN = (rssText.match(/<item>/g) || []).length;
-  check('T-26 子 feed 的覆盖面大于主 feed 截断面', essaysN > 3 && mainN <= 30, `随笔 ${essaysN} / 主 feed ${mainN}`);
+  const essaysLinks = [...essays.matchAll(/<link>([^<]*\/posts\/[^<]+)<\/link>/g)].map((m) => m[1]);
+  const lostInMain = essaysLinks.filter((u) => !rssText.includes(`<link>${u}</link>`));
+  check(
+    'T-32 主 feed 覆盖全部随笔文章（不再被条数上限砍掉）',
+    essaysLinks.length === essaysN && lostInMain.length === 0,
+    lostInMain.length ? lostInMain.join(',') : `随笔 ${essaysN} 篇全部在主 feed 中（主 feed ${mainN} 条）`,
+  );
 
   // 每个子 feed 都必须是「可独立订阅」的合法 feed：全文、语言、自引用、带 xmlns
   const badFeed = [];
@@ -1234,8 +1295,15 @@ check('站点地图存在', sitemapRes.ok);
     // RFC3339 必须能被 Date 解析且含 T/Z；toUTCString() 产出的 'GMT' 格式不合规范
     const badDate = (jsonFeed.items ?? []).filter((it) => !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(it.date_published ?? ''));
     check('T-26 JSON Feed 的 date_published 是 RFC3339', badDate.length === 0, badDate.slice(0, 2).map((i) => i.date_published).join(' | ') || `${jsonFeed.items?.length ?? 0} 条合规`);
+    // T-32 之后只有最近 FEED_FULLTEXT_LIMIT 篇带全文，其余只有 summary。
+    // 断言改为「既有带全文的、也有只有摘要的」，且两者之和等于总条数。
     const itemsWithContent = (jsonFeed.items ?? []).filter((it) => typeof it.content_html === 'string' && it.content_html.length > 100);
-    check('T-26 JSON Feed 带全文 content_html', itemsWithContent.length === (jsonFeed.items ?? []).length, `${itemsWithContent.length}/${jsonFeed.items?.length ?? 0}`);
+    const itemsWithSummaryOnly = (jsonFeed.items ?? []).filter((it) => !it.content_html && typeof it.summary === 'string' && it.summary.length > 0);
+    check(
+      'T-26 JSON Feed 全文与摘要两档并存',
+      itemsWithContent.length === 20 && itemsWithContent.length + itemsWithSummaryOnly.length === (jsonFeed.items ?? []).length,
+      `全文 ${itemsWithContent.length} / 摘要 ${itemsWithSummaryOnly.length} / 共 ${jsonFeed.items?.length ?? 0}`,
+    );
     // 正文里的站内相对链接必须被绝对化，否则在阅读器里全部断链
     const relLinks = (jsonFeed.items ?? []).flatMap((it) => (it.content_html ?? '').match(/(?:src|href)="\/(?!\/)/g) ?? []);
     check('T-26 JSON Feed 正文链接已绝对化', relLinks.length === 0, relLinks.length + ' 条相对链接');
@@ -1251,6 +1319,15 @@ check('站点地图存在', sitemapRes.ok);
   check('T-26 订阅页列出全部 12 个标签 feed', (subText.match(/\/rss\/tag\/[a-z-]+\.xml/g) || []).length >= 12, `${(subText.match(/\/rss\/tag\/[a-z-]+\.xml/g) || []).length} 个`);
   check('T-26 订阅页列出系列 feed', /\/rss\/series\/[a-z-]+\.xml/.test(subText));
   check('T-26 订阅页列出 JSON Feed', /href="\/feed\.json"/.test(subText));
+  // T-32：订阅页曾写死「全部文章，最近 30 篇带全文」与「不限最近 30 篇」，
+  // 那两条文案在解除条目截断后就是错的（读者会以为只有 30 篇能订到）。
+  // 现在必须说清「全部 N 篇 + 最近 20 篇带全文」，且 N 与主 feed 条数一致。
+  check(
+    'T-32 订阅页说明全部篇数与全文篇数',
+    new RegExp(`全部 ${mainN} 篇，最近 20 篇带全文`).test(subText),
+    (subText.match(/全部[^<]{0,20}篇[^<]{0,20}全文/) || [])[0] ?? '未找到该文案',
+  );
+  check('T-32 订阅页不再声称「不限最近 30 篇」', !/不限最近 30 篇/.test(subText));
   // 页脚文字链指向订阅页，图标仍是一键订阅（两者分工不同，不能都改也不能都不改）
   const homeHtml = await (await fetch(`${BASE}/`)).text();
   check('T-26 页脚文字链指向订阅页', homeHtml.includes('class="footer-rss-text" href="/subscribe/"'));
@@ -1708,6 +1785,33 @@ for (const path of ['/about/', '/search/']) {
     else if (entry[1] !== `${r.updated}T00:00:00.000Z`) smMiss.push(`${r.slug} lastmod=${entry[1]}`);
   }
   check('T-29 sitemap lastmod 跟随 updated', smMiss.length === 0, smMiss.slice(0, 3).join(' | ') || `${revised.length} 篇已核对`);
+
+  // ---- T-31 sitemap 里没有「无 lastmod」的页面（2026-10-20）----
+  // 改动前恰好有 2 条：/about/ 与 /subscribe/ —— serialize() 没有分支接住它们。
+  // 健康的 sitemap 不该有半套新鲜度信号：要么全给，要么就别声称自己给了。
+  // 这里断言「0 条缺 lastmod」，而不是逐个硬编码页面名，因为将来新增页面时
+  // 漏接分支同样会红，这正是我们要的。
+  const smEntryNoLm = [];
+  for (const m of smText2.matchAll(/<url>([\s\S]*?)<\/url>/g)) {
+    const loc = (/<loc>([^<]+)<\/loc>/.exec(m[1]) || [])[1] || '?';
+    if (!/<lastmod>/.test(m[1])) smEntryNoLm.push(new URL(loc).pathname);
+  }
+  check(
+    'T-31 sitemap 每个 <url> 都带 lastmod',
+    smEntryNoLm.length === 0,
+    smEntryNoLm.length ? smEntryNoLm.join(',') : `${(smText2.match(/<url>/g) || []).length} 条全部带 lastmod`,
+  );
+  // lastmod 必须是能被 Date 解析的 ISO 时间，而不是随手写的字符串
+  const badLm = [];
+  for (const m of smText2.matchAll(/<loc>([^<]+)<\/loc><lastmod>([^<]+)<\/lastmod>/g)) {
+    if (Number.isNaN(Date.parse(m[2]))) badLm.push(new URL(m[1]).pathname + '=' + m[2]);
+  }
+  check('T-31 sitemap 的 lastmod 是可解析的 ISO 时间', badLm.length === 0, badLm.slice(0, 3).join(' | ') || '全部可解析');
+  // 曾经落空的两个页面必须真有 lastmod，且 /subscribe/ 取全站最新
+  // （它列出的是随文章增删变化的 feed 清单，属于「派生自文章」的页面）。
+  for (const path of ['/about/', '/subscribe/']) {
+    check(`T-31 ${path} 在 sitemap 里有 lastmod`, new RegExp(`${path}</loc><lastmod>[^<]+</lastmod>`).test(smText2));
+  }
 
   // lastBuildDate 取的是「全站最新 lastModified」（feedLastBuildDate 由 lastModified 归约而来），
   // 而不是「最新 updated」——未修订文章的 date 也参与比较，这里必须同口径，否则会算出

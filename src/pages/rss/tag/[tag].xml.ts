@@ -7,7 +7,7 @@
 import type { APIRoute, GetStaticPaths } from 'astro';
 import { SITE } from '../../../consts';
 import { tagName, tagSlug } from '../../../data/tags';
-import { SUB_FEED_LIMIT, feedResponse } from '../../../utils/feed';
+import { feedResponse } from '../../../utils/feed';
 import { getPublishedPosts } from '../../../utils/posts';
 
 // 标签集合必须**从已发布文章反推**，不能直接用 TAGS 那张表：表里可能留着
@@ -26,10 +26,12 @@ export const GET: APIRoute = async ({ params, site }) => {
     post.data.tags.includes(name),
   );
 
+  // 不传 fulltextLimit，用默认值 20。这不构成截断：实测 12 个标签的已发布
+  // 文章数全部 ≤ 11，所以每个标签子 feed 拿到的都是该标签的全量全文。
+  // 条目数同样不设上限 —— 它与 tags/[tag].astro 列表页一一对应。
   return feedResponse({
     site: site!,
     posts,
-    limit: SUB_FEED_LIMIT,
     selfUrl: new URL(`/rss/tag/${params.tag}.xml`, site).href,
     title: `${name} · ${SITE.title}`,
     description: `只包含「${name}」标签的文章，来自 ${SITE.title}。`,

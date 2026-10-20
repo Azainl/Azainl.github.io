@@ -76,6 +76,22 @@ function newestForSeries(name) {
   );
 }
 
+/**
+ * /about/ 的 lastmod。
+ *
+ * 这一页是全站唯一「内容不派生自任何文章」的页面：它不随文章增加而变，
+ * 所以不能像列表页那样取 NEWEST；而构建期又拿不到它自己的 git 提交时间
+ * （CI 是浅克隆，createTime 不可靠）。两个诚实的选项只剩「不给」和「手写」。
+ *
+ * 选手写：把一个真实的修改日期交给爬虫，比留空更有用 —— 缺 lastmod 意味着
+ * 「新鲜度未知」，等于放弃了这部分信号。
+ *
+ * ⚠️ 维护约定：**改了 src/pages/about.astro 就同步改这里的日期**。
+ * 取值口径与文章的 date 字段一致（`YYYY-MM-DD`，纯日期，不带时间与时区）。
+ * 2026-10-19 是 about.astro 最后一次内容变更（9da6b15，订阅段改指 /subscribe/）。
+ */
+const ABOUT_LAST_MODIFIED = '2026-10-19';
+
 export default defineConfig({
   site: 'https://azainl.github.io',
   integrations: [
@@ -84,8 +100,17 @@ export default defineConfig({
       // 目前只有站内搜索页：它是工具而非内容，初始状态下没有独有信息。
       filter: (page) => !page.endsWith('/search/'),
       // 不输出 lastmod 的话，搜索引擎无法判断页面新鲜度 —— 而我们明明有每篇的
-      // date / updated。这里按页面类型分别给：文章用自身日期，列表类用最新文章日期，
-      // 关于页/搜索页没有可靠的时间语义，就不给（宁可缺，也不要给假的）。
+      // date / updated。这里按页面类型分别给：
+      //
+      //   文章页        → 该篇的 date / updated
+      //   列表类页面    → 最新一篇的日期（列表内容确实随文章增加而变）
+      //   /subscribe/  → 同上（它列出的标签、系列与各自篇数都随文章变）
+      //   /about/      → 手写常量，见 ABOUT_LAST_MODIFIED
+      //
+      // 曾经的规则是「关于页/搜索页没有可靠的时间语义，就不给」，于是这两页成了
+      // sitemap 里唯一没有 lastmod 的条目（55 条里 2 条）。缺 lastmod 不是"保守"，
+      // 是让爬虫拿不到任何新鲜度信号 —— 宁可给一个诚实的日期，也不要留空。
+      // 搜索页仍不给，因为 filter 已把它排除在 sitemap 之外。
       serialize(item) {
         const path = new URL(item.url).pathname;
         let lastmod;
@@ -96,9 +121,11 @@ export default defineConfig({
           path === '/' ||
           path === '/tags/' ||
           path === '/archive/' ||
+          path === '/subscribe/' ||
           /^\/page\/\d+\/$/.test(path)
         )
           lastmod = NEWEST;
+        else if (path === '/about/') lastmod = ABOUT_LAST_MODIFIED;
         else {
           const tag = /^\/tags\/([^/]+)\/$/.exec(path);
           if (tag && TAG_SLUGS.has(tag[1])) lastmod = newestForTag(TAG_SLUGS.get(tag[1]));

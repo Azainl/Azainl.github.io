@@ -4,6 +4,9 @@
  * 与 /rss.xml 内容等价，只是格式不同。JSON Feed 是 RSS 的现代替代，
  * 字段更直白（没有 XML 命名空间、没有 CDATA），消费方解析成本更低。
  *
+ * 条目集合、条目顺序、哪几篇带全文，三者都严格跟随 /rss.xml —— 唯一的差别是
+ * 全文放在 `content_html` 而不是 `<content:encoded>`。
+ *
  * 两个容易写错的地方：
  * 1. date_published / date_modified 必须是 RFC 3339，用 toISOString()；
  *    沿用 RSS 那边的 toUTCString() 会产出 "Sun, 19 Oct 2026 00:00:00 GMT"，
@@ -13,13 +16,16 @@
  */
 import type { APIRoute } from 'astro';
 import { SITE } from '../consts';
-import { FEED_LIMIT, absolutize, renderContents } from '../utils/feed';
+import { FEED_FULLTEXT_LIMIT, absolutize, renderContents } from '../utils/feed';
 import { getPublishedPosts, lastModified } from '../utils/posts';
 
 export const GET: APIRoute = async ({ site }) => {
-  const all = await getPublishedPosts();
-  const posts = all.slice(0, FEED_LIMIT);
-  const contents = await renderContents(posts, site!);
+  // 与 /rss.xml 同口径（见 src/utils/feed.ts 的 FEED_FULLTEXT_LIMIT 注释）：
+  // 条目覆盖**全部**已发布文章，只有最近 FEED_FULLTEXT_LIMIT 篇带 content_html，
+  // 其余只有 summary。两个订阅源对「哪几篇有全文」的判断必须一致，
+  // 否则同一篇文章在 RSS 里是摘要、在 JSON Feed 里是全篇，读起来像两个站。
+  const posts = await getPublishedPosts();
+  const contents = await renderContents(posts.slice(0, FEED_FULLTEXT_LIMIT), site!);
   const base = site!.href;
 
   const feed = {

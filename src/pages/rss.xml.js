@@ -1,36 +1,17 @@
-import rss from '@astrojs/rss';
-import { SITE } from '../consts';
+import { feedResponse } from '../utils/feed';
 import { getPublishedPosts } from '../utils/posts';
-import {
-  FEED_LIMIT,
-  feedCustomData,
-  feedLastBuildDate,
-  renderContents,
-  toRssItems,
-} from '../utils/feed';
 
-export async function GET(context) {
+export async function GET({ site }) {
   const posts = await getPublishedPosts();
-  const site = context.site;
 
-  // 全文输出：把每篇正文渲染成 HTML 交给 @astrojs/rss 的 item.content ——
-  // 只要任一 item 带了 content，它就会自动加上 content 命名空间并输出
-  // <content:encoded>。渲染失败时 renderContents 返回 null，整体回退成只输出摘要。
+  // 主 feed 就是 feedResponse 的默认形态：标题/描述取 SITE 全局值，不带 selfUrl。
   //
-  // 只渲染真正会进 feed 的那批文章：以前是全量渲染再 slice，白烧了
-  // 排在第 30 名之后的那些篇的渲染时间。产物完全相同（feedPosts ⊂ posts）。
-  const feedPosts = posts.slice(0, FEED_LIMIT);
-  const contents = await renderContents(feedPosts, site);
-
-  const lastBuildDate = feedLastBuildDate(posts);
-
-  return rss({
-    title: SITE.title,
-    description: SITE.description,
-    site,
-    items: toRssItems(feedPosts, contents, site),
-    // 主 feed 不加 atom:link self：它的地址就是 /rss.xml，第 3 方阅读器不会去
-    // 解析这个字段，加了只会让产物与历史基线不一致（T-25 要求逐字节不变）。
-    customData: feedCustomData({ lastBuildDate }),
-  });
+  // 这里不再切片 —— 条目覆盖**全部**已发布文章（32/32，曾经是 30/32，
+  // hello-world 与 why-i-write 因此进不了订阅流）。体积靠「只有最近
+  // FEED_FULLTEXT_LIMIT 篇带 <content:encoded>、其余降级为摘要」来控制，
+  // 详见 src/utils/feed.ts 里 FEED_FULLTEXT_LIMIT 的注释。
+  //
+  // 主 feed 不加 atom:link self：它的地址就是 /rss.xml，第 3 方阅读器不会去
+  // 解析这个字段。子 feed 才需要，因为它们的地理解析不出含义。
+  return feedResponse({ site, posts });
 }

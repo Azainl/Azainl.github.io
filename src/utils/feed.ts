@@ -5,26 +5,30 @@ import { SITE } from '../consts';
 import { lastModified, type Post } from './posts';
 
 /**
- * 主订阅源（/rss.xml）保留的文章数上限。
+ * 订阅源里**带全文**的文章数。
  *
- * 本站输出的是**全文**订阅（`content:encoded`），每篇约 5 KB，而且阅读器每次
- * 轮询都会拉整个 feed —— 不设上限的话它会随文章数线性膨胀：
- * 28 篇 140 KB，到 100 篇就是约 500 KB（gzip 115 KB）。
- * 截断后体积恒定，旧文章仍然可以从站点上读到，只是不再进订阅流。
+ * 这里曾经是 `FEED_LIMIT = 30`，语义是「feed 里最多放 30 篇」。那条路有个
+ * 隐蔽的后果：截断的是**条目**，于是排在 30 名之外的旧文章直接不进订阅流。
+ * 32 篇时 `hello-world`（07-12）与 `why-i-write`（07-18）就是这么丢的 ——
+ * 订阅者永远收不到它们，而 /subscribe/ 页上还写着「全部文章」。
  *
- * 调大/调小都只影响 `rss.xml`，不影响页面、sitemap 或搜索索引。
+ * 现在把「条数」和「全文」拆成两件独立的事：
+ *
+ *   ① **条目数不设上限**，覆盖订阅源对应的全部已发布文章。RSS 条目本就该与内容
+ *      集合一一对应；阅读器按 guid 去重，永远不会因为多一条而重复推送。
+ *   ② **全文只给最近 FEED_FULLTEXT_LIMIT 篇**，更旧的条目降级成 `<description>`
+ *      摘要（仍可点击回站内读全文）。
+ *
+ * 于是体积从「文章数 × 全文大小」变成「常数 + 文章数 × 摘要大小」：
+ * 32 篇时 20×4087 + 12×362 + 316 ≈ **84 KB**，比旧口径 30 篇全篇全文的
+ * **123 KB** 更小，而条目覆盖从 30/32 变成 32/32。
+ *
+ * 取 20 的依据：全文条目单条约 4 KB，20 条约 80 KB —— 正好是「阅读器一次轮询
+ * 能舒服拿完」的量级；翻倍到 40 篇会让每次轮询白拉 160 KB。
+ * 12 个标签与 1 个系列的已发布文章数全部 ≤ 11，因此这个阈值对子 feed
+ * 天然不生效，订阅者拿到的是该标签/系列的**全量**全文。
  */
-export const FEED_LIMIT = 30;
-
-/**
- * 子订阅源（按标签 / 按系列）保留的文章数上限。
- *
- * 取 20 而不是 30：实测 12 个标签的已发布文章数全部低于 20，
- * 于是「截断」对子 feed 天然不生效 —— 每个标签的订阅者拿到的是该标签的**全量**文章。
- * 这也是对主 feed 截断缺陷的补偿：主 feed 只留最近 30 篇，随笔标签实有 5 篇，
- * 排在 30 名之外的 2 篇就进不了主 feed，但订阅者可以订 /rss/tag/essays.xml 拿全。
- */
-export const SUB_FEED_LIMIT = 20;
+export const FEED_FULLTEXT_LIMIT = 20;
 
 /**
  * 把正文里的站内绝对路径补成完整 URL。
@@ -119,35 +123,44 @@ export function feedCustomData({
 /**
  * 把文章列表映射成 @astrojs/rss 的 item 数组。
  *
- * 两条容易踩的坑：
+ * 三条容易踩的坑：
  * 1. `link` 用 `new URL()` + `site`（绝对 URL），**不能**用 `src/utils/url.ts`
  *    的 `url()` —— 那个是拼 BASE 相对路径的，喂给订阅源会得到站内路径。
- * 2. `contents` 为 `null`（渲染失败）时必须**完全不产出** `content` 字段，
- *    而不是产出 `content: undefined` —— 后者会让 @astrojs/rss 仍加上
- *    content 命名空间，产物里多一个空的 `<content:encoded>`。
+ * 2. `contents` 为 `null`（渲染失败）时**完全不产出** `content` 字段。
+ * 3. `contents` 是 Map 但**不含这一篇**时，同样不能产出 `content: undefined` ——
+ *    @astrojs/rss 判定的是 `item.content` 的真值，但序列化时
+ *    `typeof result.content === 'string'` 才写 `<content:encoded>`；
+ *    给个 undefined 虽然不会写出空标签，却会让「这篇是摘要档」的意图藏在类型里。
+ *    所以这里按篇判断，只有真正拿到 HTML 的才带 content 字段。
  */
 export function toRssItems(
   posts: Post[],
   contents: Map<string, string> | null,
   site: URL,
 ): RSSFeedItem[] {
-  return posts.map((post) => ({
-    title: post.data.title,
-    pubDate: post.data.date,
-    description: post.data.description,
-    link: new URL(`/posts/${post.id}/`, site).href,
-    categories: post.data.tags,
-    ...(contents ? { content: contents.get(post.id) } : {}),
-  }));
+  return posts.map((post) => {
+    const content = contents?.get(post.id);
+    return {
+      title: post.data.title,
+      pubDate: post.data.date,
+      description: post.data.description,
+      link: new URL(`/posts/${post.id}/`, site).href,
+      categories: post.data.tags,
+      ...(content ? { content } : {}),
+    };
+  });
 }
 
 /**
  * 组装一个完整的 RSS 响应。
  *
  * 主 feed（/rss.xml）与 13 个子 feed（按标签 / 按系列）只在这几个参数上不同：
- * 文章集合、条数上限、标题、以及自引用地址。把这层差异抽成一个函数，
+ * 文章集合、全文条数上限、标题、以及自引用地址。把这层差异抽成一个函数，
  * 避免四份端点各写一遍 rss({...}) 而让字段口径（xmlns、customData、limit）
  * 在之后的修改中悄悄漂移。
+ *
+ * 注意这里**没有**「条目数上限」参数：条目永远覆盖 `posts` 全部。
+ * `fulltextLimit` 只决定前多少篇带 <content:encoded>，其余降级为摘要。
  *
  * `selfUrl` 给了才声明 atom 命名空间并输出 <atom:link rel="self">：
  * 子 feed 地址不直观（/rss/tag/frontend.xml），阅读器与聚合服务靠这个字段
@@ -156,30 +169,30 @@ export function toRssItems(
 export async function feedResponse({
   site,
   posts,
-  limit = FEED_LIMIT,
+  fulltextLimit = FEED_FULLTEXT_LIMIT,
   selfUrl,
   title = SITE.title,
   description = SITE.description,
 }: {
   site: URL;
   posts: Post[];
-  limit?: number;
+  fulltextLimit?: number;
   selfUrl?: string;
   title?: string;
   description?: string;
 }): Promise<Response> {
-  // 只渲染真正会进 feed 的那批文章，不白烧排在 limit 之后的渲染时间。
-  const feedPosts = posts.slice(0, limit);
-  const contents = await renderContents(feedPosts, site);
-  // lastBuildDate 取**该 feed 的全部文章**（不是截断后的），
-  // 与主 feed 的口径一致：被截掉的旧文章也是这个订阅源的一部分。
+  // posts 已按日期倒序（getPublishedPosts 的契约），所以 slice 取到的正是「最近 N 篇」。
+  // 只把这几篇渲染成 HTML，不白烧排在后面的文章的渲染时间 —— 它们本来就只出摘要。
+  const fulltextPosts = posts.slice(0, fulltextLimit);
+  const contents = await renderContents(fulltextPosts, site);
+  // lastBuildDate 取**该 feed 的全部文章**，与条目覆盖面对齐。
   const lastBuildDate = feedLastBuildDate(posts);
 
   return rss({
     title,
     description,
     site,
-    items: toRssItems(feedPosts, contents, site),
+    items: toRssItems(posts, contents, site),
     ...(selfUrl ? { xmlns: { atom: 'http://www.w3.org/2005/Atom' } } : {}),
     customData: feedCustomData({ selfUrl, lastBuildDate }),
   });
