@@ -1,0 +1,82 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { SITE } from '../../consts';
+import { Icon } from 'astro-icon/components';
+import { tagSlug } from '../../data/tags';
+import { url } from '../../utils/url';
+import { getPublishedPosts } from '../../utils/posts';
+import { resolveTopics } from '../../utils/topics';
+import { breadcrumbList, safeJsonLd, topicIndexPage } from '../../utils/jsonld';
+
+const posts = await getPublishedPosts();
+const topics = resolveTopics(posts).filter((topic) => topic.posts.length > 0);
+
+// 索引页渲染的是**专题列表**，不是文章列表，所以主实体每项指向一个专题页。
+// 这里不用 collectionPage()：那个函数的主实体是文章（itemListElement 直指 /posts/…），
+// 用在本页会声明一堆页面上并不存在的文章条目。
+const description = '几条人工排过的阅读线：每一条跨过若干标签，按读的顺序排，不是按发布日期。';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    topicIndexPage({
+      name: `专题 · ${SITE.name}`,
+      description,
+      path: '/topics/',
+      topics: topics.map((topic) => ({
+        name: topic.meta.name,
+        slug: topic.meta.slug,
+        count: topic.posts.length,
+        tagCount: topic.tags.length,
+      })),
+      site: Astro.site,
+    }),
+    breadcrumbList([{ path: '/', name: '首页' }, { name: '全部专题' }], Astro.site),
+  ],
+};
+---
+
+<BaseLayout title={`专题 · ${SITE.name}`} description={description}>
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
+  <div class="page-head reveal">
+    <button
+      class="post-back"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+    >
+      <Icon name="arrow-left" size={15} />
+      <span>返回</span>
+    </button>
+    <p class="post-meta">专题</p>
+    <h1>专题</h1>
+    <p>{description}</p>
+  </div>
+
+  <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
+    <ul class="post-list">
+      {
+        topics.map((topic) => (
+          <li class="post-row">
+            <a href={url(`/topics/${topic.meta.slug}/`)}>
+              {/* 第一列放篇数而不是日期：专题不按发布时间排名，
+                  读者判断要不要点进去，靠的是它有多少篇。 */}
+              <span class="post-count">{topic.posts.length} 篇</span>
+              <div>
+                <h2 class="post-row-title">{topic.meta.name}</h2>
+                <p>{topic.meta.description}</p>
+              </div>
+            </a>
+            <ul class="tag-list">
+              {topic.tags.map((tag) => (
+                <li>
+                  <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>#{tag}</a>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</BaseLayout>

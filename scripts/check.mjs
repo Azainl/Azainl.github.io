@@ -834,10 +834,11 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       listHidden: list?.hidden,
       role: list?.getAttribute('role'),
       count: options.length,
-      expected: nav2.pages.length + nav2.tags.length + nav2.series.length,
+      expected: nav2.pages.length + nav2.tags.length + nav2.series.length + nav2.topics.length,
       expectedPages: nav2.pages.length,
       expectedTags: nav2.tags.length,
       expectedSeries: nav2.series.length,
+      expectedTopics: nav2.topics.length,
       groups: groups.length,
       groupLabels: groups.map((g) => document.getElementById(g.getAttribute('aria-labelledby'))?.textContent || ''),
       labels: [...document.querySelectorAll('.search-popover-group-label')].map((e) => e.textContent),
@@ -851,10 +852,10 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   })()`);
   check(`${label}: 空查询面板打开`, nav.open === true, `open=${nav.open}`);
   check(`${label}: 空查询面板列出全部静态目标`, nav.count === nav.expected && nav.count > 0,
-    `${nav.count} 项 / 期望 ${nav.expected}（页面 ${nav.expectedPages} + 标签 ${nav.expectedTags} + 系列 ${nav.expectedSeries}）`);
-  check(`${label}: 分组齐全（页面/标签/系列）`, nav.groups >= 2 && nav.groupLabels.length === nav.groups,
+    `${nav.count} 项 / 期望 ${nav.expected}（页面 ${nav.expectedPages} + 标签 ${nav.expectedTags} + 系列 ${nav.expectedSeries} + 专题 ${nav.expectedTopics}）`);
+  check(`${label}: 分组齐全（页面/标签/系列/专题）`, nav.groups >= 2 && nav.groupLabels.length === nav.groups,
     `${nav.groups} 组: ${nav.groupLabels.join(' / ')}`);
-  check(`${label}: 分组标题可读`, nav.labels.join('') === '页面标签系列', nav.labels.join(' / '));
+  check(`${label}: 分组标题可读`, nav.labels.join('') === '页面标签系列专题', nav.labels.join(' / '));
   check(`${label}: 全站只有一个 listbox`, nav.listboxCount === 1, `${nav.listboxCount} 个`);
   check(`${label}: 所有选项都在搜索框指向的 listbox 内`, nav.insideList === true);
   check(`${label}: 选项 id 全局唯一`, new Set(nav.ids).size === nav.ids.length,
@@ -864,8 +865,11 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     `${nav.hrefs.filter((h) => h && h.startsWith('/')).length}/${nav.hrefs.length}`);
   check(`${label}: 列出后 aria-expanded=true`, nav.ariaExpanded === 'true', String(nav.ariaExpanded));
 
-  // 方向键必须跨组连续：前 8 项是页面，第 9 次 ArrowDown 应落到第一个标签上
+  // 方向键必须跨组连续：走完第一组（页面）后，下一次 ArrowDown 应落到第一个标签上。
+  // 锚点从 nav.json 的 pages 数量反推，不写死下标 —— 页面组增减一项时这里会自动跟上。
+  const steps = nav.expectedPages + 1;
   const walk = await evaluate(cdp, `(async () => {
+    const steps = ${steps};
     const input = document.querySelector('.header-search-input');
     const press = (key) => input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
     const state = () => {
@@ -881,7 +885,7 @@ await runPage(`${BASE}/`, async (cdp, label) => {
       };
     };
     const seen = [];
-    for (let i = 0; i < 9; i++) { press('ArrowDown'); await new Promise((r) => setTimeout(r, 20)); seen.push(state()); }
+    for (let i = 0; i < steps; i++) { press('ArrowDown'); await new Promise((r) => setTimeout(r, 20)); seen.push(state()); }
     press('End'); await new Promise((r) => setTimeout(r, 20));
     const end = state();
     press('Home'); await new Promise((r) => setTimeout(r, 20));
@@ -891,8 +895,12 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     return { seen, end, home, upAtTop, total: document.querySelectorAll('.search-popover-item').length };
   })()`);
   const last = walk.seen[walk.seen.length - 1];
-  check(`${label}: 方向键跨组连续`, last?.index === 8 && last?.group === '标签',
-    `第 9 次 ArrowDown → index=${last?.index} group=${last?.group}`);
+  const firstTagIndex = nav.expectedPages;
+  check(
+    `${label}: 方向键跨组连续`,
+    last?.index === firstTagIndex && last?.group === '标签',
+    `第 ${firstTagIndex + 1} 次 ArrowDown → index=${last?.index} group=${last?.group}`,
+  );
   check(`${label}: 跨组后 activedescendant 仍唯一且对齐`,
     walk.seen.every((s, i) => s && s.desc === s.id && s.index === i),
     walk.seen.map((s) => `${s?.index}:${s?.group}`).join(' '));
@@ -1695,6 +1703,214 @@ for (const path of ['/about/', '/search/']) {
   );
 }
 
+
+// ---- T-41 专题页：人工编排的阅读线（2026-10-22）----
+// 专题与标签、系列的根本差别：成员不由文章自己声明，只存在于 src/data/topics.ts。
+// 所以最容易静默出错的是「数据改了、页面没跟上」—— 顺序、条数、结构化数据、
+// sitemap 新鲜度这几处必须同源。这里全部用**独立口径**对拍：直接读 topics.ts 与
+// frontmatter，不 import src/utils/topics.ts，源码写错时测试不跟着一起错。
+{
+  const topicsSrc = readFileSync(join(ROOT, 'src/data/topics.ts'), 'utf8');
+  const topics = [];
+  for (const m of topicsSrc.matchAll(/slug:\s*'([^']+)'[\s\S]*?posts:\s*\[([\s\S]*?)\]/g)) {
+    const posts = m[2]
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+    topics.push({ slug: m[1], posts });
+  }
+  check('T-41 topics.ts 能解析出专题', topics.length >= 2, topics.map((t) => t.slug).join(','));
+
+  // 已发布文章集合（独立口径：frontmatter + 北京日历日 + lastModified 归约）
+  const postsDir = join(ROOT, 'src/content/posts');
+  const bjDay = (v) => new Date(new Date(v).getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  const today = bjDay(new Date());
+  const published = new Map(); // id -> { modified, tags }
+  for (const f of readdirSync(postsDir)) {
+    if (!f.endsWith('.md')) continue;
+    const src = readFileSync(join(postsDir, f), 'utf8');
+    const get = (k) =>
+      ((new RegExp('^' + k + '\\s*:\\s*["\']?([^"\'\\n]+)', 'm').exec(src) || [])[1] || '').trim();
+    const date = get('date');
+    if (!date || get('draft').toLowerCase() === 'true' || bjDay(date) > today) continue;
+    const updated = get('updated');
+    const tags = ((/^tags:\s*\[([^\]]*)\]/m.exec(src) || [])[1] || '')
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+    published.set(f.replace(/\.md$/, ''), {
+      modified: updated && updated > date ? updated : date,
+      tags,
+    });
+  }
+
+  // ① 数据健康：缺 id、重复、太薄三种都要先在这里挡住。
+  //    这些错不会让构建失败——页面照常渲染，只是少一篇或顺序对不上，
+  //    读者完全看不出来，只有回归断言能卡住。
+  const issues = [];
+  for (const t of topics) {
+    const seen = new Set();
+    for (const id of t.posts) {
+      if (seen.has(id)) issues.push(t.slug + ' 重复：' + id);
+      seen.add(id);
+      if (!published.has(id)) issues.push(t.slug + ' 缺失：' + id);
+    }
+    const tagSet = new Set();
+    for (const id of t.posts) for (const tag of published.get(id)?.tags || []) tagSet.add(tag);
+    const live = [...seen].filter((id) => published.has(id)).length;
+    if (tagSet.size < 3 && live < 6) issues.push(t.slug + ' 太薄：' + tagSet.size + ' 个标签 / ' + live + ' 篇');
+  }
+  check(
+    'T-41 专题数据无缺篇/重复/太薄',
+    issues.length === 0,
+    issues.slice(0, 3).join(' | ') || topics.length + ' 个专题',
+  );
+
+  // ② 专题总览页：行数 = 专题数，每行指向的 slug 必须真实存在
+  const idxHtml = await (await fetch(BASE + '/topics/')).text();
+  const idxRows = (idxHtml.match(/<li class="post-row[ "]/g) || []).length;
+  const idxHrefs = [...idxHtml.matchAll(/<li class="post-row[ "][\s\S]*?<a href="([^"]+)"/g)].map((x) => x[1]);
+  check('T-41 专题总览页列出全部专题', idxRows === topics.length, '行=' + idxRows + ' 数据=' + topics.length);
+  check(
+    'T-41 专题总览页链接与数据一致',
+    idxHrefs.length === topics.length && topics.every((t) => idxHrefs.includes('/topics/' + t.slug + '/')),
+    idxHrefs.join(','),
+  );
+  const idxLd = [...idxHtml.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((x) => x[1]);
+  let idxParsed = null;
+  try {
+    idxParsed = idxLd.map((x) => JSON.parse(x));
+  } catch {
+    idxParsed = null;
+  }
+  check('T-41 专题总览页含可解析的 JSON-LD', idxParsed !== null && idxParsed.length > 0, idxLd.length + ' 块');
+  if (idxParsed) {
+    const flat = [];
+    const walk = (n) => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(walk);
+      flat.push(n);
+      Object.values(n).forEach(walk);
+    };
+    idxParsed.forEach(walk);
+    const cp = flat.find((n) => n['@type'] === 'CollectionPage');
+    const cpItems = cp && cp.mainEntity && cp.mainEntity.numberOfItems;
+    check('T-41 专题总览页含 CollectionPage', !!cp);
+    check(
+      'T-41 专题总览页 JSON-LD 条数与页面一致',
+      cpItems === idxRows,
+      'ld=' + (cpItems ?? -1) + ' dom=' + idxRows,
+    );
+    const bc = flat.find((n) => n['@type'] === 'BreadcrumbList');
+    const names = bc ? bc.itemListElement.map((x) => x.name) : [];
+    check('T-41 专题总览页面包屑为 首页 > 全部专题', names[0] === '首页' && names[1] === '全部专题', names.join(' > '));
+  }
+
+  // ③ 每个专题详情页：条数、阅读序号、链接顺序、结构化数据四者同源。
+  //    顺序是专题唯一不可让渡的语义——按日期重排一次就退化成标签页了。
+  const detailBad = [];
+  for (const t of topics) {
+    const expectedOrder = t.posts.filter((id) => published.has(id));
+    const html = await (await fetch(BASE + '/topics/' + t.slug + '/')).text();
+    const rows = (html.match(/<li class="post-row[ "]/g) || []).length;
+    if (rows !== expectedOrder.length) {
+      detailBad.push(t.slug + ' 行数 ' + rows + '≠' + expectedOrder.length);
+      continue;
+    }
+    const ordinals = [...html.matchAll(/<span class="post-index"[^>]*>(\d{2})<\/span>/g)].map((x) => x[1]);
+    if (ordinals.length !== rows || !ordinals.every((v, i) => v === String(i + 1).padStart(2, '0'))) {
+      detailBad.push(t.slug + ' 序号 ' + ordinals.join(','));
+    }
+    const hrefs = [...html.matchAll(/<li class="post-row[ "][\s\S]*?<a href="([^"]+)"/g)].map((x) => x[1]);
+    if (hrefs.join(',') !== expectedOrder.map((id) => '/posts/' + id + '/').join(',')) {
+      detailBad.push(t.slug + ' 顺序 ' + hrefs.join(','));
+    }
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((x) => x[1]);
+    let parsed = null;
+    try {
+      parsed = blocks.map((x) => JSON.parse(x));
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || parsed.length === 0) {
+      detailBad.push(t.slug + ' 无 JSON-LD');
+      continue;
+    }
+    const flat = [];
+    const walk = (n) => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(walk);
+      flat.push(n);
+      Object.values(n).forEach(walk);
+    };
+    parsed.forEach(walk);
+    const cp = flat.find((n) => n['@type'] === 'CollectionPage');
+    const cpItems = cp && cp.mainEntity && cp.mainEntity.numberOfItems;
+    if (cpItems !== rows) detailBad.push(t.slug + ' ld 条数 ' + (cpItems ?? -1) + '≠' + rows);
+    const bc = flat.find((n) => n['@type'] === 'BreadcrumbList');
+    const names = bc ? bc.itemListElement.map((x) => x.name) : [];
+    if (names.length !== 3 || names[0] !== '首页' || names[1] !== '专题' || !names[2]) {
+      detailBad.push(t.slug + ' 面包屑 ' + names.join(' > '));
+    }
+  }
+  check(
+    'T-41 专题详情页：条数/序号/顺序/结构化数据同源',
+    detailBad.length === 0,
+    detailBad.slice(0, 3).join(' | ') || topics.length + ' 个专题',
+  );
+
+  // ④ sitemap：详情页的 lastmod 必须取「专题内最新一篇」，不能取全站最新——
+  //    后者会让每个专题看起来天天在更新，等于没给新鲜度信号。
+  const smText = await (await fetch(BASE + '/sitemap-0.xml')).text();
+  const lmOf = (path) => {
+    const m = new RegExp(path + '</loc><lastmod>([^<]+)</lastmod>').exec(smText);
+    return m ? m[1] : '';
+  };
+  const newerOf = (ids) =>
+    ids
+      .filter((id) => published.has(id))
+      .reduce((acc, id) => (published.get(id).modified > acc ? published.get(id).modified : acc), '');
+  const smBad = [];
+  for (const t of topics) {
+    const want = newerOf(t.posts);
+    const got = lmOf('/topics/' + t.slug + '/').slice(0, 10);
+    if (got !== want) smBad.push(t.slug + ' ' + got + '≠' + want);
+  }
+  check(
+    'T-41 sitemap 每个专题页 lastmod 取专题内最新',
+    smBad.length === 0,
+    smBad.slice(0, 3).join(' | ') || topics.length + ' 个专题',
+  );
+  const allNewest = [...published.values()].reduce((acc, v) => (v.modified > acc ? v.modified : acc), '');
+  check(
+    'T-41 sitemap 专题总览页 lastmod 取全站最新',
+    lmOf('/topics/').slice(0, 10) === allNewest,
+    lmOf('/topics/').slice(0, 10) + ' vs ' + allNewest,
+  );
+
+  // ⑤ 入口：首页、关于页、命令面板三处都要通得进去。
+  //    专题只存在于数据文件里，没有入口就等于不存在，而页面本身看不出来。
+  const homeHtml = await (await fetch(BASE + '/')).text();
+  const homeTrail = (/<nav class="home-block home-trails"[\s\S]*?<\/nav>/.exec(homeHtml) || [''])[0];
+  const homeLinks = [...homeTrail.matchAll(/href="(\/topics\/[^"]*)"/g)].map((x) => x[1]);
+  check(
+    'T-41 首页有专题入口且条数与数据一致',
+    homeLinks.filter((h) => h !== '/topics/').length === topics.length,
+    homeLinks.join(','),
+  );
+  const aboutHtml = await (await fetch(BASE + '/about/')).text();
+  check('T-41 关于页链到专题总览', /href="\/topics\/"/.test(aboutHtml));
+  const navData = await (await fetch(BASE + '/nav.json')).json();
+  const navTopics = navData.topics;
+  check(
+    'T-41 命令面板专题组与数据一致',
+    Array.isArray(navTopics) &&
+      navTopics.length === topics.length &&
+      topics.every((t) => navTopics.some((x) => x.href === '/topics/' + t.slug + '/')),
+    'nav=' + (Array.isArray(navTopics) ? navTopics.length : '缺失') + ' 数据=' + topics.length,
+  );
+}
+
 // ---- T-29 启用 updated：修订时间要贯穿四个出口（2026-10-19）----
 // 背景：updated 字段一直存在、PostLayout 也一直在渲染，但全站 0 篇使用，
 // 所以「有 updated 时会发生什么」这条路径从来没有被走过（④ 修订记录只测了
@@ -2184,12 +2400,13 @@ for (const path of ['/about/', '/search/']) {
   walkSrc(join(ROOT, 'src'));
   const allSrc = srcFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
   const rawCount = (allSrc.match(/JSON\.stringify\(jsonLd\)/g) || []).length;
-  // 1 处定义 + 8 处调用（文章页/首页/标签总览/标签页/分页页/归档页/系列页/关于页）。
+  // 1 处定义 + 10 处调用（文章页/首页/标签总览/标签页/分页页/归档页/系列页/
+  // 关于页/专题总览/专题详情页）。
   // 每新增一个产出 JSON-LD 的页面，这里的下限必须同步上调 —— 否则
   // 新页面完全可以用裸 JSON.stringify 而不被发现（下限是闸门，不是描述）。
   const safeCount = (allSrc.match(/safeJsonLd\(/g) || []).length;
   check('结构化数据: 无裸 JSON.stringify(jsonLd)', rawCount === 0, `${rawCount} 处`);
-  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 9, `${safeCount} 处`);
+  check('结构化数据: safeJsonLd 覆盖定义与全部调用点', safeCount >= 11, `${safeCount} 处`);
   check(
     '结构化数据: safeJsonLd 转义 < > & U+2028 U+2029',
     /\\u003c/.test(allSrc) && /\\u003e/.test(allSrc) && /\\u0026/.test(allSrc) && /u2028/.test(allSrc) && /u2029/.test(allSrc),
@@ -2202,7 +2419,16 @@ for (const path of ['/about/', '/search/']) {
   for (const entry of readdirSync(join(ROOT, 'dist/posts'), { withFileTypes: true })) {
     if (entry.isDirectory()) pages.push(`/posts/${entry.name}/`);
   }
-  for (const p of ['/', '/tags/', '/page/2/', '/archive/', '/series/astro-blog/']) pages.push(p);
+  for (const p of [
+    '/',
+    '/tags/',
+    '/page/2/',
+    '/archive/',
+    '/series/astro-blog/',
+    '/topics/',
+    '/topics/ship-it/',
+  ])
+    pages.push(p);
 
   let badBlocks = 0;
   let totalBlocks = 0;

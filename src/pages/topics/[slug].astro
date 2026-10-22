@@ -1,0 +1,105 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { SITE } from '../../consts';
+import { Icon } from 'astro-icon/components';
+import { tagSlug } from '../../data/tags';
+import { vtName } from '../../utils/vtName';
+import { url } from '../../utils/url';
+import { getPublishedPosts } from '../../utils/posts';
+import { resolveTopics } from '../../utils/topics';
+import { breadcrumbList, collectionPage, safeJsonLd } from '../../utils/jsonld';
+
+export async function getStaticPaths() {
+  const posts = await getPublishedPosts();
+  const topics = resolveTopics(posts).filter((topic) => topic.posts.length > 0);
+  return topics.map((topic) => ({ params: { slug: topic.meta.slug }, props: { slug: topic.meta.slug } }));
+}
+
+const { slug } = Astro.props;
+const posts = await getPublishedPosts();
+const topic = resolveTopics(posts).find((item) => item.meta.slug === slug);
+
+// 路由由 getStaticPaths 决定，这里拿不到专题只可能是数据被中途改坏；
+// 与其渲染一个空页面，不如让构建直接失败。
+if (!topic) throw new Error(`未知专题：${slug}`);
+
+const topicPath = `/topics/${topic.meta.slug}/`;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    collectionPage({
+      name: `${topic.meta.name} · ${SITE.name}`,
+      description: topic.meta.description,
+      path: topicPath,
+      posts: topic.posts,
+      site: Astro.site,
+    }),
+    breadcrumbList(
+      [
+        { path: '/', name: '首页' },
+        { path: '/topics/', name: '专题' },
+        { name: topic.meta.name },
+      ],
+      Astro.site,
+    ),
+  ],
+};
+---
+
+<BaseLayout title={`${topic.meta.name} · ${SITE.name}`} description={topic.meta.description}>
+  <script type="application/ld+json" is:inline set:html={safeJsonLd(jsonLd)} slot="ld" />
+  <div class="page-head reveal">
+    <button
+      class="post-back"
+      id="back-button"
+      type="button"
+      aria-label="返回上一页"
+    >
+      <Icon name="arrow-left" size={15} />
+      <span>返回</span>
+    </button>
+    <p class="post-meta">专题</p>
+    <h1>{topic.meta.name}</h1>
+    <p>
+      {topic.meta.description} · 共 {topic.posts.length} 篇，跨 {topic.tags.length} 个标签
+    </p>
+  </div>
+
+  <section class="archive reveal" style="padding-top: 0; --reveal-delay: 80ms">
+    <ol class="post-list">
+      {
+        topic.posts.map((post, i) => (
+          <li class="post-row">
+            <a href={url(`/posts/${post.id}/`)}>
+              {/* 专题里这一列是阅读顺序，不是日期：顺序由 src/data/topics.ts 人工排定。
+                  用 span 而不是 <time> —— 序号不是合法日期，<time> 又不能省 datetime。 */}
+              <span class="post-index">{String(i + 1).padStart(2, '0')}</span>
+              <div>
+                <h2
+                  class="post-row-title"
+                  transition:name={vtName(post.id)}
+                  transition:animate="none"
+                >
+                  {post.data.title}
+                </h2>
+                <p>{post.data.description}</p>
+              </div>
+            </a>
+            {post.data.tags.length > 0 && (
+              <ul class="tag-list">
+                {post.data.tags.map((tag) => (
+                  <li>
+                    <a class="tag" href={url(`/tags/${tagSlug(tag)}/`)}>#{tag}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))
+      }
+    </ol>
+    <p class="back-row">
+      <a class="back-link" href={url('/topics/')}>← 全部专题</a>
+    </p>
+  </section>
+</BaseLayout>

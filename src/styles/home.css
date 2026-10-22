@@ -99,6 +99,67 @@
   font-size: var(--text-ui);
 }
 
+
+/* 专题：与「按主题」并排，但说的是另一件事——那边是分类，这边是顺序。
+   所以这里不再排成标签行，而是一个个名字带篇数的入口，横排两列。
+   两条都带 border-top，是站内分隔区块的既有做法（.colophon 也这样）。 */
+.home-trails {
+  padding: var(--space-12) 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* 标题自带 space-6 下间距，对一句话的说明来说太松，往上收半档。 */
+.home-block-note {
+  margin: calc(var(--space-3) * -1) 0 var(--space-6);
+  padding: 0 var(--gutter);
+  color: var(--ink-3);
+  font-size: var(--text-ui);
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+
+.trail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--gutter);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-2) var(--space-8);
+}
+
+.trail-list a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--rule);
+  transition: color 0.15s ease;
+}
+
+.trail-name {
+  font-family: var(--font-serif);
+  font-size: var(--text-ui);
+}
+
+.trail-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  flex: none;
+}
+
+.trail-list a:hover,
+.trail-list a:hover .trail-count {
+  color: var(--accent);
+}
+
+.trails-all {
+  margin: var(--space-6) 0 0;
+  padding: 0 var(--gutter);
+  font-size: var(--text-ui);
+}
 /* 版权行：一行收尾。报头已经说过这个站是什么，这里不再重复自我介绍，
    只给两条真正有用的出口。 */
 .colophon {
@@ -177,7 +238,11 @@
   background: var(--bg-soft);
 }
 
-.post-row time {
+/* 第一列除了日期，还可以是别的东西：专题索引页放篇数、专题详情页放阅读序号。
+   三者共用同一套度量，改 6.5rem 栅格时不会漏掉其中任何一个。 */
+.post-row time,
+.post-row .post-count,
+.post-row .post-index {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   /* 等宽数字：一列日期左对齐时数字不会参差 */
@@ -247,7 +312,9 @@
 }
 
 .post-row > a:hover .post-row-title,
-.post-row > a:hover time {
+.post-row > a:hover time,
+.post-row > a:hover .post-count,
+.post-row > a:hover .post-index {
   color: var(--accent);
 }
 
@@ -256,7 +323,9 @@
     grid-template-columns: 1fr;
     gap: 0.2rem;
   }
-  .post-row time {
+  .post-row time,
+  .post-row .post-count,
+  .post-row .post-index {
     padding-top: 0;
   }
   /* 窄屏改成单列后，日期与「推荐」并排更省高度 */

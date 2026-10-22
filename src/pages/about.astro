@@ -3,6 +3,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE } from '../consts';
 import { aboutPage, breadcrumbList, safeJsonLd } from '../utils/jsonld';
 import { url } from '../utils/url';
+import { getPublishedPosts } from '../utils/posts';
+import { resolveTopics } from '../utils/topics';
+
+// 只数「真有文章」的专题：空专题在页面上不出现，关于页也不该替它报数。
+const topicCount = resolveTopics(await getPublishedPosts()).filter(
+  (topic) => topic.posts.length > 0,
+).length;
 
 // 实测 56 个真实页中，本页是**唯一**「有 canonical、未 noindex、零结构化数据」的页面：
 // 搜索引擎知道它存在，却拿不到任何实体声明。补 AboutPage + 面包屑。
@@ -46,6 +53,12 @@ const jsonLd = {
         <a href={url('/posts/blog-build-notes/')}>这篇文章</a>里。
         本站没有评论系统、没有广告，也没有统计脚本，只有按时间排列的文章。
         如果你读到了什么，欢迎写信给我。
+      </p>
+
+      <h2>专题</h2>
+      <p>
+        文章按标签分堆，也按时间排。此外还有 {topicCount} 条人工排过的阅读线，
+        每条跨好几个标签、按读的顺序排，见<a href={url('/topics/')}>专题</a>。
       </p>
 
       <h2>联系我</h2>

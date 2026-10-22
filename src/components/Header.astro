@@ -128,21 +128,22 @@ const links = [
     hint: string;
   }
 
-  /** 命令面板的静态目标表：页面 / 标签 / 系列 */
+  /** 命令面板的静态目标表：页面 / 标签 / 系列 / 专题 */
   interface NavData {
     pages: NavTarget[];
     tags: NavTarget[];
     series: NavTarget[];
+    topics: NavTarget[];
   }
 
   let nav: NavData | null = null;
   let navPromise: Promise<NavData> | null = null;
 
   /**
-   * 按需加载命令面板的静态目标表（/nav.json，约 1.4 KB）。
+   * 按需加载命令面板的静态目标表（/nav.json，几 KB）。
    *
-   * 与 ensureIndex 分开是刻意的：空查询只需要这份表，不必为了列 21 个入口
-   * 就把 22 KB 的正文索引拉下来。失败时静默降级为空表，面板只剩"继续输入"。
+   * 与 ensureIndex 分开是刻意的：空查询只需要这份表，不必为了列这些入口
+   * 就把二十多 KB 的正文索引拉下来。失败时静默降级为空表，面板只剩"继续输入"。
    */
   function ensureNav(): Promise<NavData> {
     if (!navPromise) {
@@ -155,7 +156,7 @@ const links = [
           nav = data;
           return data;
         })
-        .catch(() => ({ pages: [], tags: [], series: [] }));
+        .catch(() => ({ pages: [], tags: [], series: [], topics: [] }));
     }
     return navPromise;
   }
@@ -380,16 +381,19 @@ const links = [
       return holder;
     }
 
-    /** 空查询时的面板：页面 / 标签 / 系列三组静态入口 */
+    /** 空查询时的面板：页面 / 标签 / 系列 / 专题四组静态入口 */
     function renderNav(data: NavData) {
       listEl.replaceChildren();
       moreEl.hidden = true;
       activeIndex = -1;
 
+      // 专题排在最后：前 8 项是页面这一点被 check 当作方向键跨组的锚点，
+      // 而专题是四组里最少人用的，往后放不挡路。
       const groups: [string, { href: string; label: string; hint: string }[]][] = [
         ['页面', data.pages],
         ['标签', data.tags],
         ['系列', data.series],
+        ['专题', data.topics],
       ];
       let count = 0;
       for (const [label, targets] of groups) {

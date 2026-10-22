@@ -184,3 +184,42 @@ export function tagIndexPage(opts: {
     },
   };
 }
+
+/**
+ * 专题总览页（/topics/）。
+ *
+ * 与标签总览页同样的取舍：本页渲染的是**专题列表**而不是文章，
+ * 所以主实体的每一项是一个专题页（ListItem 自带 url 指向 /topics/<slug>/），
+ * 不是文章。描述里带上篇数与覆盖的标签数——这两项在页面上都直接可见。
+ *
+ * 专题详情页不需要专门的构造函数：那边渲染的确实是有序文章列表，
+ * 直接用 collectionPage() 即可。
+ */
+export function topicIndexPage(opts: {
+  name: string;
+  description: string;
+  path: string;
+  topics: { name: string; slug: string; count: number; tagCount: number }[];
+  site: URL | undefined;
+}): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: opts.name,
+    description: opts.description,
+    url: absUrl(opts.path, opts.site),
+    inLanguage: SITE.locale,
+    isPartOf: webSiteRef(opts.site),
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: opts.topics.length,
+      itemListElement: opts.topics.map((topic, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        url: absUrl(`/topics/${topic.slug}/`, opts.site),
+        name: topic.name,
+        description: `${topic.count} 篇文章，跨 ${topic.tagCount} 个标签`,
+      })),
+    },
+  };
+}

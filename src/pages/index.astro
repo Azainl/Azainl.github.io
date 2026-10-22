@@ -7,6 +7,7 @@ import { url } from '../utils/url';
 import { tagSlug, usedTagGroups } from '../data/tags';
 import { formatDate } from '../utils/formatDate';
 import { collectionPage, safeJsonLd } from '../utils/jsonld';
+import { resolveTopics } from '../utils/topics';
 
 const posts = await getPublishedPosts();
 
@@ -28,6 +29,10 @@ for (const post of posts) {
 }
 const usedTags = new Set(tagCounts.keys());
 const groups = usedTagGroups(usedTags);
+
+// 专题入口：标签是「这类文章归在一起」，专题是「这几篇按这个顺序读」。
+// 两者并排出现时必须有一句话把差别说出来，否则读者会当成同一份导航点两次。
+const topics = resolveTopics(posts).filter((topic) => topic.posts.length > 0);
 
 const base = url('/');
 
@@ -130,6 +135,30 @@ const jsonLd = {
         </dl>
         <p class="topic-all reveal">
           <a href={url('/tags/')}>全部 {tagCounts.size} 个主题</a>
+        </p>
+      </nav>
+    )
+  }
+
+  {
+    topics.length > 0 && (
+      <nav class="home-block home-trails" aria-labelledby="trails-heading">
+        <h2 class="home-block-title reveal" id="trails-heading">专题</h2>
+        <p class="home-block-note reveal">
+          上面按主题分组，这里按顺序读：几条人工排过的线，每条跨好几个标签。
+        </p>
+        <ul class="trail-list reveal">
+          {topics.map((topic) => (
+            <li>
+              <a href={url(`/topics/${topic.meta.slug}/`)}>
+                <span class="trail-name">{topic.meta.name}</span>
+                <span class="trail-count">{topic.posts.length} 篇</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p class="trails-all reveal">
+          <a href={url('/topics/')}>全部 {topics.length} 条线索</a>
         </p>
       </nav>
     )

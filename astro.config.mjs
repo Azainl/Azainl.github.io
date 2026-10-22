@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { satteri } from '@astrojs/markdown-satteri';
 import markdownImageSizes from './plugins/markdown-image-sizes.mjs';
 import { isReleased } from './src/utils/release.ts';
+import { TOPICS } from './src/data/topics.ts';
 
 /**
  * 构建期读一遍文章的 frontmatter，给 sitemap 提供 `lastmod`。
@@ -100,6 +101,22 @@ function newestForSeries(name) {
 }
 
 /**
+ * 某专题下最新一篇的日期。
+ *
+ * 专题的成员写在 src/data/topics.ts 里（文章 id 列表），这里直接 import 那个模块取，
+ * 不用正则去解析 —— 它是个纯数据模块，没有 Astro 运行时依赖，配置期 import 是安全的。
+ * 逐个正则抠 posts 数组反而更容易在某次格式化后静默失配。
+ */
+function newestForTopic(slug) {
+  const topic = TOPICS.find((item) => item.slug === slug);
+  if (!topic) return '';
+  return POSTS.filter((p) => topic.posts.includes(p.slug)).reduce(
+    (acc, p) => (p.date > acc ? p.date : acc),
+    '',
+  );
+}
+
+/**
  * /about/ 的 lastmod。
  *
  * 这一页是全站唯一「内容不派生自任何文章」的页面：它不随文章增加而变，
@@ -128,6 +145,7 @@ export default defineConfig({
       //   文章页        → 该篇的 date / updated
       //   列表类页面    → 最新一篇的日期（列表内容确实随文章增加而变）
       //   /subscribe/  → 同上（它列出的标签、系列与各自篇数都随文章变）
+      //   /topics/     → 同上；/topics/<slug>/ 取该专题内最新一篇
       //   /about/      → 手写常量，见 ABOUT_LAST_MODIFIED
       //
       // 曾经的规则是「关于页/搜索页没有可靠的时间语义，就不给」，于是这两页成了
@@ -143,6 +161,7 @@ export default defineConfig({
         else if (
           path === '/' ||
           path === '/tags/' ||
+          path === '/topics/' ||
           path === '/archive/' ||
           path === '/subscribe/' ||
           /^\/page\/\d+\/$/.test(path)
@@ -155,6 +174,10 @@ export default defineConfig({
           const series = /^\/series\/([^/]+)\/$/.exec(path);
           if (series && SERIES_SLUGS.has(series[1]))
             lastmod = newestForSeries(SERIES_SLUGS.get(series[1]));
+          // 专题详情页取该专题内最新一篇的日期 —— 与标签页、系列页同一思路。
+          const topic = /^\/topics\/([^/]+)\/$/.exec(path);
+          if (topic && TOPICS.some((item) => item.slug === topic[1]))
+            lastmod = newestForTopic(topic[1]);
         }
 
         if (lastmod) item.lastmod = lastmod;

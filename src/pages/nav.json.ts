@@ -3,7 +3,7 @@
  *
  * 为什么要在服务端生成而不是写死在 Header.astro 里：标签与系列的名字、slug、
  * 篇数全部来自 src/data 与内容集合，写死就等于在客户端维护第二份真相。
- * 这份表只有 21 条、不到 2 KB，比把 TAGS/SERIES 整个打包进 JS 便宜得多。
+ * 这份表只有二十几条、几 KB，比把 TAGS/SERIES/TOPICS 整个打包进 JS 便宜得多。
  *
  * 与 tags/index.astro 同一口径：只收录**有已发布文章**的标签与系列，
  * 否则面板里会出现点进去空空如也的入口。
@@ -15,6 +15,7 @@ import { SERIES, seriesSlug } from '../data/series';
 import { url } from '../utils/url';
 import { getPublishedPosts } from '../utils/posts';
 import { getUsedSeries } from '../utils/series';
+import { resolveTopics } from '../utils/topics';
 
 interface NavTarget {
   label: string;
@@ -32,6 +33,7 @@ export const GET: APIRoute = async () => {
     }
   }
   const usedSeries = getUsedSeries(posts);
+  const usedTopics = resolveTopics(posts).filter((topic) => topic.posts.length > 0);
 
   // 页面这一组是人工挑选的「值得一键跳过去」的固定入口。
   // 分页页（/page/2..N/）刻意不列：它们不是目的地，翻页有更自然的路径。
@@ -62,7 +64,13 @@ export const GET: APIRoute = async () => {
     hint: `${usedSeries.get(item.name)?.length ?? 0} 篇`,
   }));
 
-  return new Response(JSON.stringify({ pages, tags, series }), {
+  const topics: NavTarget[] = usedTopics.map((topic) => ({
+    label: topic.meta.name,
+    href: url(`/topics/${topic.meta.slug}/`),
+    hint: `${topic.posts.length} 篇，按顺序读`,
+  }));
+
+  return new Response(JSON.stringify({ pages, tags, series, topics }), {
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
 };
