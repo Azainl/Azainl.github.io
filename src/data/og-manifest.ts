@@ -34,4 +34,7 @@ export const OG_SLUGS: string[] = [
   'checklist-purpose',
   'head-meta',
   'backup-habit',
+  'measure-before-change',
+  'classify-by-retrieval',
+  'docs-for-strangers',
 ];

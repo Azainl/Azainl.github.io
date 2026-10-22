@@ -566,10 +566,11 @@ await runPage(`${BASE}/`, async (cdp, label) => {
     window.scrollTo(0, 900);
     await sleep(250);
     const yBefore = Math.round(window.scrollY);
-    // 客户端导航进文章页（走 View Transitions，与用户点击一致）
-    const link = [...document.querySelectorAll('a')].find(
-      (a) => a.getAttribute('href') === '/posts/writing-short/',
-    );
+    // 客户端导航进文章页（走 View Transitions，与用户点击一致）。
+    // 目标文章**从首页实际渲染的第一篇文章取**，不写死 slug ——
+    // 首页只列最近 PER_PAGE 篇，写死任何一篇都会随新文章发布而落到第二页（历史坑：
+    // 这里曾写死 /posts/writing-short/，新增三篇后它掉出首页，link 变 undefined 直接抛错）。
+    const link = [...document.querySelectorAll('a[href^="/posts/"]')][0];
     link.click();
     for (let i = 0; i < 40; i++) {
       await sleep(100);
@@ -1382,19 +1383,41 @@ if (searchJsonRes.ok) {
 {
   const searchBody = await (await fetch(`${BASE}/search.json`)).text();
   const searchBuf = Buffer.from(searchBody, 'utf8');
+  const idx = JSON.parse(searchBody);
+
+  // 体积上限按**当前篇数**推导，不写死绝对值：正文已截断到 500 字，
+  // 单篇体积有上界（500 个汉字 = 1500 B + 标题/标签/日期等元数据），
+  // 所以「每篇预算 × 篇数」是比常数更诚实的口径 —— 新增文章不会假红，
+  // 而把 CONTENT_LIMIT 调回 2000 会让单篇预算立刻被击穿，回归照样抓得住。
+  // 每篇预算取实测均值上浮：raw 1700 B/篇、gzip 730 B/篇（2026-10 实测 raw≈1636、gzip≈716）。
+  const rawBudget = idx.length * 1700;
+  const gzipBudget = idx.length * 730;
   check(
     'T-21 搜索索引 raw 体积达标',
-    searchBuf.length <= 52 * 1024,
-    `${searchBuf.length} B ≤ ${52 * 1024} B（改前 59049，500 字档实测 49905）`,
+    searchBuf.length <= rawBudget,
+    `${searchBuf.length} B ≤ ${rawBudget} B（${idx.length} 篇 × 1700 B）`,
   );
+  const gzLen = gzipSync(searchBuf).length;
   check(
     'T-21 搜索索引 gzip 体积达标',
-    gzipSync(searchBuf).length <= 24 * 1024,
-    `${gzipSync(searchBuf).length} B ≤ ${24 * 1024} B（改前 26546，500 字档实测 22629）`,
+    gzLen <= gzipBudget,
+    `${gzLen} B ≤ ${gzipBudget} B（${idx.length} 篇 × 730 B）`,
   );
 
-  const idx = JSON.parse(searchBody);
-  check('T-21 搜索索引条目数不变', idx.length === 32, `${idx.length} 篇`);
+  // 条目数从 frontmatter 独立重算（非 draft + 北京日历日已到），不写死常量。
+  const idxPostsDir = join(ROOT, 'src', 'content', 'posts');
+  const idxToday = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+  const expectedIdx = readdirSync(idxPostsDir).filter((file) => {
+    if (!file.endsWith('.md')) return false;
+    const src = readFileSync(join(idxPostsDir, file), 'utf8');
+    const date = (/^date:\s*["']?([^"'\n]+)/m.exec(src) || [])[1]?.trim();
+    const draft = (/^draft:\s*["']?([^"'\n]+)/m.exec(src) || [])[1]?.trim();
+    if (!date || draft?.toLowerCase() === 'true') return false;
+    // 与 utils/release.ts 同口径：北京日历日已到才放行
+    const bj = (v) => new Date(new Date(v).getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+    return bj(date) <= bj(new Date());
+  }).length;
+  check('T-21 搜索索引条目数等于已发布文章数', idx.length === expectedIdx, `${idx.length} 篇 / 应为 ${expectedIdx} 篇`);
 
   // 截断真的生效了：至少一篇 content 长度恰好等于 500（说明 slice 命中上限）
   const atLimit = idx.filter((p) => p.content.length === 500).length;
@@ -2305,12 +2328,19 @@ for (const path of ['/about/', '/search/']) {
 // 截断到前 500 字后，两者口径不再等价（页面用 post.body 全文，search.json 只有前 500 字），
 // 重算值会系统性偏小（实测 47 vs 页面 56，ratio 0.84 → 假红）。
 // 改为直接读 Markdown 源文件、剥掉 frontmatter 后用同一公式重算，与页面同源。
-// 前提：getPublishedPosts() 在 PROD 下会滤掉 draft 与未来日期文章；当前 32 篇全为已发布，
-// 若将来出现 draft，这里会多算，届时需要同步过滤 frontmatter（届时断言会先红，是好事）。
+// 前提：getPublishedPosts() 在 PROD 下会滤掉 draft 与未来日期文章。这里的重算**不过滤**，
+// 依赖「当前仓库里没有 draft / 未来日期文章」这个事实（check 跑在 CI 上，date 也都已到达）。
+// 一旦出现 draft 或未来日期文章，本断言会先红 —— 那时要在这里补同口径过滤，不要改期望值。
 {
   const archiveHtml = await (await fetch(BASE + '/archive/')).text();
-  const m = /读完约\s*(\d+)\s*分钟/.exec(archiveHtml);
-  const shown = m ? Number(m[1]) : null;
+  // 归档页在总阅读时长 >= 60 分钟时改写成「x 小时 y 分钟」（archive.astro:62-69），
+  // 两种形态都要能解析，否则篇数一多断言会以 shown=null 假红。
+  const shown = (() => {
+    const hm = /读完约\s*(\d+)\s*小时(?:\s*(\d+)\s*分钟)?/.exec(archiveHtml);
+    if (hm) return Number(hm[1]) * 60 + Number(hm[2] ?? 0);
+    const m = /读完约\s*(\d+)\s*分钟/.exec(archiveHtml);
+    return m ? Number(m[1]) : null;
+  })();
 
   const postsDir = join(ROOT, 'src', 'content', 'posts');
   const calc = readdirSync(postsDir)
