@@ -88,6 +88,11 @@ function initRandomPost(): void {
     if (event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
+    // 鼠标点击会把焦点落到这个链接上，而页脚带 transition:persist，
+    // 跳转后链接仍在文档最底部。浏览器为了让聚焦元素保持可见，会把视口
+    // 重新滚到底部，盖掉 ClientRouter 刚做完的「回到顶部」——表现为整页
+    // 一路滑到最下方。跳转前先把焦点移走。
+    link.blur();
     void openRandom(link);
   });
 }

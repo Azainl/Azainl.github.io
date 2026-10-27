@@ -73,10 +73,27 @@
   }
 
   /* ---- 版面：去掉屏幕端的留白与宽度约束 ---- */
-  .post {
+  /* 宽屏端 .post 是两列网格（正文 + 页边注）。这里必须整条拆掉：
+     只写 max-width: none 会把两列模板留下，正文继续被 --measure 钉在
+     34rem，纸张右侧白白空掉三分之一；grid-column 也会让自成一格。
+     子项复位不能只写 > *：它的优先级低于 pages.css 的
+     .post:has(> .toc-rail) > :not(.toc-rail)，虽然 display:block 下暂时无效，
+     但以后若有人删掉 display:block 就会立刻露馅。下面用与屏幕端同构的
+     :not(.toc-rail) 写法，让两处特异度相等，胜负交给导入顺序（print 在最后）。 */
+  .post,
+  .post:has(> .toc-rail) {
+    display: block;
+    grid-template-columns: none;
+    grid-auto-flow: row;
     max-width: none;
     margin: 0;
     padding: 0;
+  }
+
+  .post:has(> .toc-rail) > :not(.toc-rail),
+  .post:has(> .toc-rail) > .toc-rail {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .post-header {

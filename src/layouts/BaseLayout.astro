@@ -167,6 +167,11 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
       import '../scripts/vtAxis';
     </script>
     <script>
+      // 换页滚动守卫：persist 页脚里的链接获得焦点、或键盘聚焦页面底部的
+      // 翻页按钮后立刻回车，都会让视口在换页后被拉到页面底部（详见模块注释）。
+      import '../scripts/scrollGuard';
+    </script>
+    <script>
       // 客户端路由兜底：导航后页面内容与 URL 不一致时强制整页刷新，
       // 防止个别浏览器（或返回键场景）下路由交换失败导致页面空白。
       function ensurePageMatchesUrl() {

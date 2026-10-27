@@ -3265,6 +3265,398 @@ await runPage(
   '关于页版式',
 );
 
+// ---- 文章页宽屏三列：正文始终居中、目录进右栏、正文两侧留白对称 ----
+// 约定：宽屏加了旁注栏，也不能把正文整体推向左缘。三列结构是
+//   左留白（--toc-col） | 正文（--measure） | 目录（--toc-col）
+// 左右两条旁注列等宽，于是正文中线与视口中线重合，左右留白相等；
+// 目录紧贴正文右缘（列距 --space-12），而不是被推到页边。
+// 断言全部按**令牌解析值**比对，不写死 px —— 改 --measure / --toc-col /
+// --space-12 时断言自动跟随，不会变成一组骗人的魔法数字。
+// 内边距也从计算样式读取。
+const WIDE_POST = '/posts/docs-for-strangers/';
+const cssVarPx = (cdp, name) =>
+  evaluate(
+    cdp,
+    `(() => {
+      const p = document.createElement('i');
+      p.style.cssText = 'position:absolute;left:-9999px;top:0;width:var(${name})';
+      document.body.appendChild(p);
+      const w = p.getBoundingClientRect().width;
+      p.remove();
+      return w;
+    })()`,
+  );
+
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const measurePx = await cssVarPx(cdp, '--measure');
+    const tocColPx = await cssVarPx(cdp, '--toc-col');
+    const gapPx = await cssVarPx(cdp, '--space-12');
+    const gutterPx = await cssVarPx(cdp, '--gutter');
+    const expectedPostW = measurePx + 2 * tocColPx + 2 * gapPx + 2 * gutterPx;
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const box = (el) => {
+          const b = el.getBoundingClientRect();
+          return { left: Math.round(b.left), right: Math.round(b.right), width: Math.round(b.width) };
+        };
+        const post = document.querySelector('.post');
+        const prose = document.querySelector('.prose');
+        const toc = document.querySelector('.toc-rail');
+        const cs = getComputedStyle(post);
+        return {
+          post: box(post),
+          prose: box(prose),
+          toc: toc ? box(toc) : null,
+          tocPosition: toc ? getComputedStyle(toc).position : 'none',
+          display: cs.display,
+          postPadLeft: Math.round(parseFloat(cs.paddingLeft)),
+          postPadRight: Math.round(parseFloat(cs.paddingRight)),
+          cols: cs.gridTemplateColumns.split(' ').map((v) => Math.round(parseFloat(v))),
+          cw: document.documentElement.clientWidth,
+          overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 容器按三列 + 两侧内边距展开`,
+      r.display === 'grid' && Math.abs(r.post.width - expectedPostW) <= 2,
+      `display=${r.display} postW=${r.post.width} 期望 ${Math.round(expectedPostW)}`,
+    );
+    check(
+      `${label}: 正文列仍钉在 --measure（30 字/行护栏）`,
+      Math.abs(r.prose.width - measurePx) <= 2,
+      `proseW=${r.prose.width} 期望 ${measurePx}`,
+    );
+    check(
+      `${label}: 三列 = 留白 + 正文 + 页边栏`,
+      r.cols.length === 3 &&
+        Math.abs(r.cols[0] - tocColPx) <= 2 &&
+        Math.abs(r.cols[1] - measurePx) <= 2 &&
+        Math.abs(r.cols[2] - tocColPx) <= 2,
+      `cols=${r.cols.join('px ')}px 期望 ${tocColPx}/${measurePx}/${tocColPx}`,
+    );
+    check(
+      `${label}: 正文整体居中（中线 = 视口中线）`,
+      Math.abs((r.prose.left + r.prose.right) / 2 - r.cw / 2) <= 2,
+      `prose=${r.prose.left}-${r.prose.right} 中线=${(r.prose.left + r.prose.right) / 2} 视口中线=${r.cw / 2}`,
+    );
+    check(
+      `${label}: 正文左右留白相等`,
+      Math.abs(r.prose.left - (r.cw - r.prose.right)) <= 2,
+      `左=${r.prose.left} 右=${r.cw - r.prose.right} 视口=${r.cw}`,
+    );
+    check(
+      `${label}: 容器在视口中居中`,
+      Math.abs(r.post.left - (r.cw - r.post.right)) <= 2,
+      `post=${r.post.left}-${r.post.right} 视口=${r.cw}`,
+    );
+    check(
+      `${label}: 目录进右栏、紧贴正文且不压正文`,
+      !!r.toc &&
+        r.tocPosition === 'sticky' &&
+        Math.abs(r.toc.right - (r.post.right - r.postPadRight)) <= 2 &&
+        Math.abs(r.toc.left - r.prose.right - gapPx) <= 2 &&
+        Math.abs(r.toc.width - tocColPx) <= 2,
+      r.toc
+        ? `pos=${r.tocPosition} 间隙=${r.toc.left - r.prose.right} 期望=${gapPx} w=${r.toc.width} 右=${r.toc.right} 栏右=${r.post.right - r.postPadRight}`
+        : 'missing',
+    );
+    check(`${label}: 无横向溢出`, !r.overflow, String(r.overflow));
+  },
+  '文章页宽屏三列',
+);
+
+// ---- 宽屏：.post 里所有子块都必须落在正文列 ----
+// 早先这里逐个列了 .post-header / .prose / .related / .post-footer 四块，
+// 白名单漏写一块，那块就静默落进第 1 列（左侧留白列）——浏览器不报错、
+// 不溢出，正文左边凭空多出一块内容。现在 CSS 改成 :not(.toc-rail) 兜底，
+// 本条用探针替身守住它：往 .post 末尾追加一块，它必须和 .prose 同列。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `
+        (() => {
+          const post = document.querySelector('.post');
+          const prose = document.querySelector('.prose');
+          const box = (el) => {
+            const b = el.getBoundingClientRect();
+            return { left: Math.round(b.left), right: Math.round(b.right) };
+          };
+          const ghost = document.createElement('div');
+          ghost.textContent = 'probe';
+          post.appendChild(ghost);
+          const inline = document.createElement('i');
+          document.querySelector('.post-header').appendChild(inline);
+          const out = {
+            prose: box(prose),
+            ghost: box(ghost),
+            ghostCol: getComputedStyle(ghost).gridColumnStart,
+            inlineCol: getComputedStyle(inline).gridColumnStart,
+            overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+          ghost.remove();
+          inline.remove();
+          return out;
+        })()
+      `,
+    );
+    check(
+      `${label}: 后加的子块落进正文列（不掉进左留白列）`,
+      Math.abs(r.ghost.left - r.prose.left) <= 2 &&
+        Math.abs(r.ghost.right - r.prose.right) <= 2,
+      `probe=${r.ghost.left}-${r.ghost.right} prose=${r.prose.left}-${r.prose.right} grid-column=${r.ghostCol}`,
+    );
+    // 兜底规则只作用于直接子元素：题头里嵌套的元素不该被拖进第 2 列，
+    // 否则将来有人在题头里放一个 flex/grid 排版就会莫名错位。
+    check(
+      `${label}: 嵌套元素不被直系规则波及`,
+      r.inlineCol === 'auto',
+      `grid-column=${r.inlineCol}`,
+    );
+    check(`${label}: 无横向溢出`, !r.overflow, String(r.overflow));
+  },
+  '文章页宽屏-子块落列',
+);
+
+// ---- 宽屏：正文列的下限必须是绝对像素，不能跟着字号一起放大 ----
+// 三列若全用 rem，用户把浏览器默认字号调大时三列总和会超出视口，
+// 而 minmax(0, …) 允许正文列被无限压缩：两侧 rem 列刚性、正文列让位，
+// 结果正文塌成一条竖线，既不报错也不溢出，只是静默变得不可读
+// （改版初期实测 1280 视口 / 40px 字号时正文宽 0）。
+// 这里锁两个无障碍里程碑：WCAG 200%（32px）与 300%（48px）。
+// 目录栏可以窄，但不能被挤没 —— 旁注窄了无所谓，正文塌了就不行。
+const MIN_PROSE_PX = 280;
+const MIN_TOC_PX = 100;
+// 只锁绝对下限还不够：正文列被两侧目录列挤扁时仍可能大于 280px。
+// 真正的判据是「让位顺序」—— 字号放大时该先牺牲旁注，正文必须始终明显更宽。
+// 实测 1280 视口：正文列有 px 下限时 fs=32 是 519/239、fs=48 是 474/194；
+// 若退回 minmax(0,…) 则变成 333/333 与 287/287（三列等分，正文塌成旁注宽）。
+const PROSE_TO_TOC_RATIO = 1.5;
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const root = document.documentElement;
+        const post = document.querySelector('.post');
+        const prose = document.querySelector('.prose');
+        const toc = document.querySelector('.toc-rail');
+        const rows = [];
+        for (const fs of [16, 32, 48]) {
+          root.style.fontSize = fs + 'px';
+          void post.offsetWidth;
+          rows.push({
+            fs: fs,
+            proseW: Math.round(prose.getBoundingClientRect().width),
+            tocW: toc ? Math.round(toc.getBoundingClientRect().width) : 0,
+            cols: getComputedStyle(post).gridTemplateColumns.split(' ').map(function (v) { return Math.round(parseFloat(v)); }),
+            overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+          });
+        }
+        root.style.fontSize = '';
+        void post.offsetWidth;
+        return { rows: rows };
+      })()`,
+    );
+    const desc = (row) => `fs=${row.fs} 正文=${row.proseW} 目录=${row.tocW} 三列=${row.cols.join('/')}`;
+    for (const row of r.rows.filter((x) => x.fs > 16)) {
+      check(
+        `${label}: ${row.fs}px 字号下正文不被压成竖线、目录不被挤没`,
+        row.proseW >= MIN_PROSE_PX &&
+          row.tocW >= MIN_TOC_PX &&
+          row.proseW >= row.tocW * PROSE_TO_TOC_RATIO,
+        `${desc(row)} 下限 正文 ${MIN_PROSE_PX} / 目录 ${MIN_TOC_PX} / 正文≥旁注×${PROSE_TO_TOC_RATIO}`,
+      );
+    }
+    const overflowed = r.rows.filter((row) => row.overflow);
+    check(
+      `${label}: 放大到 300% 字号仍无横向溢出`,
+      overflowed.length === 0,
+      overflowed.length ? overflowed.map(desc).join(' | ') : 'ok',
+    );
+  },
+  '文章页宽屏-大字号',
+  { width: 1280 },
+);
+
+// 断点边界：1279px 附近不能出现「目录消失」的缝。
+// 中屏分支必须保持开区间 (min-width:1080px)。如果加 max-width:1279px，
+// DPR≠1 的小数视口（如 1279.5px）会两段都不命中：目录退回 display:none，
+// 而抽屉开关在 ≥1080px 又是隐藏的 —— 目录彻底消失且无法唤出。
+// 自动化边界：CDP 的 setDeviceMetricsOverride 只接受整数宽度，iframe 的
+// 媒体查询宽度也会被取整，1279.5 无法稳定复现；这里锁整数边界 + fixed，
+// 1279.5 / 1079.5 的小数行为由操作文档记录的真实 DPR 1.5 手工验证兜底。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const toc = document.querySelector('.toc-rail');
+        const cs = toc ? getComputedStyle(toc) : null;
+        return {
+          iw: window.innerWidth,
+          tocDisplay: cs ? cs.display : 'none',
+          tocPosition: cs ? cs.position : 'none',
+          postWidth: Math.round(document.querySelector('.post').getBoundingClientRect().width),
+        };
+      })()`,
+    );
+    check(
+      `${label}: 目录在断点边界不消失且仍是 fixed`,
+      r.tocDisplay === 'block' && r.tocPosition === 'fixed',
+      `iw=${r.iw} toc=${r.tocDisplay}/${r.tocPosition} postW=${r.postWidth}`,
+    );
+  },
+  '文章页宽屏-断点边界',
+  { width: 1279 },
+);
+
+// 中屏回退：1280px 以下必须回到收窄列 + 视口右侧浮层目录，否则宽屏的
+// 放宽会一路污染到平板。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const measurePx = await cssVarPx(cdp, '--measure');
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const post = document.querySelector('.post');
+        const toc = document.querySelector('.toc-rail');
+        const cs = toc ? getComputedStyle(toc) : null;
+        return {
+          display: getComputedStyle(post).display,
+          postWidth: Math.round(post.getBoundingClientRect().width),
+          padding: parseFloat(getComputedStyle(post).paddingLeft) + parseFloat(getComputedStyle(post).paddingRight),
+          tocDisplay: cs ? cs.display : 'none',
+          tocPosition: cs ? cs.position : 'none',
+        };
+      })()`,
+    );
+    check(
+      `${label}: 回到收窄列`,
+      r.display === 'block' && Math.abs(r.postWidth - (measurePx + r.padding)) <= 2,
+      `display=${r.display} postW=${r.postWidth} 期望 ${measurePx + r.padding}（正文 ${measurePx} + 内边距 ${r.padding}）`,
+    );
+    check(
+      `${label}: 目录回到视口右侧浮层`,
+      r.tocDisplay === 'block' && r.tocPosition === 'fixed',
+      `${r.tocDisplay}/${r.tocPosition}`,
+    );
+  },
+  '文章页宽屏回落-中屏',
+  { width: 1200 },
+);
+
+// 窄屏：抽屉行为不能因为宽屏改版而回归
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const toc = document.querySelector('.toc-rail');
+        const toggle = document.querySelector('.toc-toggle');
+        const cs = toc ? getComputedStyle(toc) : null;
+        return {
+          toggleDisplay: toggle ? getComputedStyle(toggle).display : 'none',
+          tocPosition: cs ? cs.position : 'none',
+          collapsed: cs ? cs.visibility === 'hidden' && cs.transform !== 'none' : false,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 目录是抽屉且默认收起`,
+      r.toggleDisplay !== 'none' && r.tocPosition === 'fixed' && r.collapsed,
+      `toggle=${r.toggleDisplay} pos=${r.tocPosition} collapsed=${r.collapsed}`,
+    );
+  },
+  '文章页宽屏回落-窄屏',
+  { width: 390 },
+);
+
+// ---- 抽屉开着时把窗口拉宽：遮罩必须跟着消失 ----
+// 遮罩是给窄屏抽屉用的，却曾经是一条无媒体查询的 fixed + z-index:30 全屏层。
+// 窄屏开抽屉 → 拉宽到 ≥1080px 时 .toc-toggle 被 display:none 藏掉（关不掉），
+// 遮罩还在 → 整页变成点不动的灰屏，只能刷新。修法是给遮罩加
+// @media (min-width:1080px){ .toc-backdrop { display: none } }。
+// 本条走真实流程：900px 点开开关 → 拉宽到 1280px → 查遮罩、开关、命中元素。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 900,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await sleep(300);
+    const opened = await evaluate(
+      cdp,
+      `
+        (() => {
+          const toggle = document.querySelector('.toc-toggle');
+          const rail = document.querySelector('.toc-rail');
+          const backdrop = document.querySelector('.toc-backdrop');
+          toggle.click();
+          return {
+            railOpen: rail.classList.contains('open'),
+            backdropHidden: backdrop.hidden,
+          };
+        })()
+      `,
+    );
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await sleep(400);
+    const after = await evaluate(
+      cdp,
+      `
+        (() => {
+          const backdrop = document.querySelector('.toc-backdrop');
+          const toggle = document.querySelector('.toc-toggle');
+          const rail = document.querySelector('.toc-rail');
+          const hit = document.elementFromPoint(
+            Math.round(window.innerWidth / 2),
+            Math.round(window.innerHeight / 2),
+          );
+          return {
+            backdropDisplay: getComputedStyle(backdrop).display,
+            toggleDisplay: getComputedStyle(toggle).display,
+            railPosition: getComputedStyle(rail).position,
+            centerHit: hit ? hit.className || hit.tagName : 'null',
+          };
+        })()
+      `,
+    );
+    check(
+      `${label}: 抽屉开着时拉宽，遮罩不再盖住页面`,
+      opened.railOpen &&
+        !opened.backdropHidden &&
+        after.backdropDisplay === 'none' &&
+        after.toggleDisplay === 'none' &&
+        after.centerHit !== 'toc-backdrop',
+      `open=${opened.railOpen} 遮罩hidden=${opened.backdropHidden} → 遮罩=${after.backdropDisplay} 开关=${after.toggleDisplay} 中心=${after.centerHit}`,
+    );
+    check(
+      `${label}: 拉宽后目录仍是常驻栏`,
+      after.railPosition === 'sticky',
+      `pos=${after.railPosition}`,
+    );
+  },
+  '文章页抽屉-开时拉宽',
+);
+
 // ---- 首页列表：标签在「上方文字」与「下方分割线」之间居中 ----
 // 起因：标签是 <a> 的兄弟节点，上间距 = <a> 的 24px 下内边距 + 标签 8px 外边距
 // = 32px；而下间距只由标签自己的 margin-bottom 决定，原为 0。
@@ -3631,7 +4023,130 @@ await runPage(
   '随机阅读-点击',
 );
 
-// ④ 清单拉取失败：退回归档页
+// ⑤ 真实鼠标点击后必须停在文章顶部
+// 上面几条用的是 element.click()：程序化点击不会让链接获得焦点，
+// 而这个问题恰恰是「链接拿到焦点 + 页脚 transition:persist 留在文档最底部」
+// 让浏览器为保持聚焦元素可见而把视口拉到底。只有 CDP 真实输入才能复现，
+// 所以必须单开一条，别合并进 ③。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    const pos = await evaluate(
+      cdp,
+      `(() => {
+        const a = document.querySelector('[data-random-post]');
+        a.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const r = a.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, start: Math.round(scrollY) };
+      })()`,
+    );
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: pos.x,
+        y: pos.y,
+        button: 'left',
+        clickCount: 1,
+      });
+    }
+    await sleep(2500);
+    const after = await evaluate(
+      cdp,
+      `({ path: location.pathname, y: Math.round(scrollY) })`,
+    );
+    check(
+      `${label}: 鼠标点「随便看看」后停在文章顶部`,
+      pos.start > 100 && after.y <= 4 && after.path !== '/',
+      `起点 y=${pos.start} → 终 y=${after.y} path=${after.path}`,
+    );
+  },
+  '随机阅读-真实点击落点',
+);
+
+// ⑥ 换页滚动守卫：persist 容器里获得焦点的链接，换页后不能把视口拉到页面底部
+// 根因见 src/scripts/scrollGuard.ts：页脚带 transition:persist，跨页保留在文档
+// 最底部；点它里面的链接后 Astro 的 restoreFocus 会把焦点还给那个仍在页底的
+// 链接，浏览器为保持聚焦元素可见就把视口重新拉到底。
+// 与 ⑤ 一样必须用 CDP 真实输入：程序化 .click() 不给链接焦点，复现不出来。
+await runPage(
+  `${BASE}/posts/blog-build-notes/`,
+  async (cdp, label) => {
+    const pos = await evaluate(
+      cdp,
+      `(() => {
+        const a = document.querySelector('a.footer-rss-text');
+        a.scrollIntoView({ block: 'center', behavior: 'instant' });
+        const r = a.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, start: Math.round(scrollY) };
+      })()`,
+    );
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: pos.x,
+        y: pos.y,
+        button: 'left',
+        clickCount: 1,
+      });
+    }
+    await sleep(2600);
+    const after = await evaluate(
+      cdp,
+      `({ path: location.pathname, y: Math.round(scrollY), maxY: Math.round(document.documentElement.scrollHeight - innerHeight) })`,
+    );
+    check(
+      `${label}: 点页脚「RSS 订阅」后停在订阅页顶部`,
+      after.path === '/subscribe/' && after.y <= 4,
+      `起点 y=${pos.start} → ${after.path} y=${after.y}/${after.maxY}`,
+    );
+  },
+  '换页滚动-页脚链接',
+);
+
+// ⑦ 键盘聚焦页面底部的翻页按钮后立刻回车，换页后同样不能滚偏
+// 这条与 ⑥ 是两个独立机制：焦点在页脚之外（分页器在 main 里），走的是
+// 「平滑滚动把聚焦元素带进视口」的动画与换页重叠 —— html 上有
+// scroll-behavior: smooth，动画没跑完就换页，残余动画把新页滚偏。
+// 实测未修复时首页 → /page/2/ 落在 y=129（抖动区间 15–229）。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    await evaluate(cdp, `window.scrollTo({ top: 0, behavior: 'instant' })`);
+    await sleep(350);
+    const focused = await evaluate(
+      cdp,
+      `(() => {
+        const a = document.querySelector('a.page-btn[data-dir=next]');
+        if (!a) return false;
+        a.focus();
+        return document.activeElement === a;
+      })()`,
+    );
+    // 不等待：竞态正是「聚焦后立刻回车」才出现，加 sleep 就复现不了了
+    for (const type of ['keyDown', 'keyUp']) {
+      await cdp.send('Input.dispatchKeyEvent', {
+        type,
+        key: 'Enter',
+        code: 'Enter',
+        windowsVirtualKeyCode: 13,
+        nativeVirtualKeyCode: 13,
+      });
+    }
+    await sleep(3000);
+    const after = await evaluate(
+      cdp,
+      `({ path: location.pathname, y: Math.round(scrollY) })`,
+    );
+    check(
+      `${label}: 键盘聚焦翻页按钮后立刻回车，停在下一页顶部`,
+      focused && after.path === '/page/2/' && after.y <= 4,
+      `focus=${focused} → ${after.path} y=${after.y}`,
+    );
+  },
+  '换页滚动-键盘翻页',
+);
+
+// ⑧ 清单拉取失败：退回归档页
 await runPage(
   `${BASE}${t39Start}`,
   async (cdp, label) => {

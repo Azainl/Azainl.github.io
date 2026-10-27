@@ -5,23 +5,30 @@
    设计上刻意**不加边框、不加底色、不加圆角** —— 圆角浮层会读成
    "一个控件"，而目录本质是正文的旁注。只用一条细线 + 疏排小字。
 
-   位置公式与文章列宽是**耦合**的：
-     TOC 左缘 ≈ 视口中心 + 文章列半宽，且要保持 ≥12px 间隙。
-   文章列宽 = calc(--measure + 2.5rem) = 36.5rem，半宽 18.25rem；
-   用 32rem 作基准留出余量，两侧才不会在断点附近相撞。
-   改文章列宽时必须回来核对这里。
+   **两种落位，按视口分**：
+   1) 1080–1279.98px：文章列仍是收窄的 --measure + 2.5rem = 36.5rem
+      （半宽 18.25rem），容器两侧的空白还被正文挤着，只能让目录
+      以 fixed 浮层停在正文列右侧（右缘用 max(1.5rem, calc(50% - 32rem - 0.75rem))
+      算，用 32rem 而非 18.25rem 作基准留出余量，断点附近两栏才不相撞）。
+   2) ≥1280px（且本文有目录）：pages.css 的 .post 已切成三列网格
+      （左留白 | 正文 | 目录），目录就是网格的第三列 —— 此时**必须**是
+      static/sticky，再保留 fixed 会把它整个从网格里拽出来、压在正文上。
    ============================================================ */
 .toc-rail {
   display: none;
 }
 
+/* 保持开区间。如果改成 (min-width:1080px) and (max-width:1279px)，
+   DPR≠1 的窗口里媒体查询用的是带小数的布局视口（如 1279.5px），
+   而 window.innerWidth 只报整数 —— 落进缝里的宽度两个分支都不命中，
+   目录直接消失、抽屉开关也不出现。宽屏分支只负责把 position 改掉。 */
 @media (min-width: 1080px) {
   .toc-rail {
     display: block;
     position: fixed;
     top: calc(var(--header-h) + 3rem);
     right: max(1.5rem, calc(50% - 32rem - 0.75rem));
-    width: 12rem;
+    width: var(--toc-col); /* 单一来源：base.css 的 --toc-col */
     max-height: calc(100vh - var(--header-h) - 4rem);
     overflow-y: auto;
     scrollbar-width: thin;
@@ -30,7 +37,24 @@
   }
 }
 
-/* 移动端目录开关按钮：桌面隐藏，≤1079px 才出现 */
+/* 宽屏：目录是 .post 网格的第三列（列定义与 span 在 pages.css）。
+   这里只负责"按栏的方式站着"——sticky 让它随正文滚动但不跟着跑掉，
+   长度超出视口时自己滚，不把文章列撑高。 */
+@media (min-width: 1280px) {
+  .post:has(> .toc-rail) > .toc-rail {
+    display: block;
+    position: sticky;
+    top: calc(var(--header-h) + var(--space-6));
+    right: auto; /* 清掉中屏 fixed 规则继承的 right，避免 sticky 留下横向约束 */
+    width: 100%;
+    max-height: calc(100vh - var(--header-h) - var(--space-12));
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+/* 移动端目录开关按钮：桌面隐藏，≤1079.98px 才出现 */
 .toc-toggle {
   display: none;
   align-items: center;
@@ -60,7 +84,19 @@
   z-index: 30;
 }
 
-@media (max-width: 1079px) {
+/* 遮罩只服务于窄屏抽屉。缺了下面这条，窄屏开抽屉后把窗口拉宽到
+   >=1080px 时，.toc-toggle 被 display:none 藏掉（关不掉），遮罩却
+   仍是 fixed 全屏 z-index:30 —— 整页变成点不动的灰屏，只能刷新。 */
+@media (min-width: 1080px) {
+  .toc-backdrop {
+    display: none;
+  }
+}
+
+/* 移动端媒体查询的 max-width 要留 0.02px 余量：写成 1079px 时，
+   1079.5px 的小数视口既进不了这里、也进不了 1080px 分支，
+   抽屉开关和目录会一起消失。 */
+@media (max-width: 1079.98px) {
   .toc-toggle {
     display: inline-flex;
   }

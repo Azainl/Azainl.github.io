@@ -95,6 +95,11 @@
   /* 全站只有这一条内容宽度。曾并行定义过 --container: 46rem，
      但它零引用（各区块都走 wide），属于"看着像备选、实则死值"，已删。 */
   --container-wide: 58rem;
+
+  /* 页边栏（目录）列宽。宽屏下它同时被 pages.css 的 .post 网格列与
+     post-extras.css 的 .toc-rail 引用 —— 只写在任一侧，另一侧就只能猜。
+     12rem 是"能放下 6~8 字的小节标题、又不会被正文吸进视线"的最小值。 */
+  --toc-col: 12rem;
   --header-h: 3.75rem;
 
   /* 页面水平留白（"gutter"）。此前以字面量 1.25rem 散落在 15 处——

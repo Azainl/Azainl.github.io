@@ -37,4 +37,7 @@ export const OG_SLUGS: string[] = [
   'measure-before-change',
   'classify-by-retrieval',
   'docs-for-strangers',
+  'find-the-middle-line',
+  'break-it-to-check-it',
+  'scroll-to-the-bottom',
 ];
