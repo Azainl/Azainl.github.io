@@ -76,12 +76,11 @@ const links = [
         class="theme-toggle"
         id="theme-toggle"
         type="button"
-        aria-label="切换主题（当前：跟随系统）"
-        title="主题：跟随系统"
+        aria-label="切换主题"
+        title="切换主题"
       >
         <Icon name="sun" class="icon-sun" />
         <Icon name="moon" class="icon-moon" />
-        <Icon name="monitor" class="icon-monitor" />
       </button>
     </div>
   </div>
@@ -161,42 +160,43 @@ const links = [
     return navPromise;
   }
 
-  type ThemePref = 'light' | 'dark' | 'system';
-  const THEME_ORDER: ThemePref[] = ['light', 'dark', 'system'];
+  /* 主题只有两个状态：浅色 / 深色。
+     没选过时「默认跟随系统」——它不是一个可停留的第三态，只是初始值：
+     系统是深色就直接渲染深色，此后用户点一下按钮就变成显式偏好并存进
+     localStorage，不再随系统变。这样按钮永远只做一件事：把当前主题翻过来。 */
+  type ThemePref = 'light' | 'dark';
   const THEME_LABELS: Record<ThemePref, string> = {
     light: '浅色',
     dark: '深色',
-    system: '跟随系统',
   };
 
-  /** 读取当前偏好：没选过或值非法都按 system 处理 */
+  /** 系统当前偏好，仅用作没有显式选择时的初始值 */
+  function systemPref(): ThemePref {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  }
+
+  /** 当前生效的主题：存过显式偏好就用它，否则跟随系统 */
   function currentPref(): ThemePref {
     const saved = localStorage.getItem('theme');
-    return saved === 'light' || saved === 'dark' ? saved : 'system';
+    return saved === 'light' || saved === 'dark' ? saved : systemPref();
   }
 
-  function isDark(pref: ThemePref): boolean {
-    return (
-      pref === 'dark' ||
-      (pref === 'system' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-    );
-  }
-
-  /** 按钮无障碍文本反映「当前偏好」，而不是当前实际明暗 */
+  /** 按钮文本说明「点了会切到哪个」，不是当前状态——按钮要预言自己的结果 */
   function syncToggleLabel(pref: ThemePref): void {
     const toggle = document.getElementById('theme-toggle');
     if (!toggle) return;
-    const label = THEME_LABELS[pref];
-    toggle.setAttribute('aria-label', `切换主题（当前：${label}）`);
-    toggle.setAttribute('title', `主题：${label}`);
+    const next = THEME_LABELS[pref === 'dark' ? 'light' : 'dark'];
+    toggle.setAttribute('aria-label', `切换到${next}主题`);
+    toggle.setAttribute('title', `切换到${next}主题`);
   }
 
   /**
    * 让 theme-color 与实际底色一致。
    *
-   * 两处 meta 的 media 分支只认**系统**偏好；本站的偏好是 light/dark/system
-   * 三态，用户显式选过之后可能与系统相反，那时 media 分支给出的就是错的颜色。
+   * 两处 meta 的 media 分支只认**系统**偏好；用户显式选过之后主题可能与
+   * 系统相反，那时 media 分支给出的就是错的颜色。
    * 这里按实际渲染出的 --bg 回写两处 meta —— 直接取值而不是再抄一份十六进制，
    * 保证与令牌同源、不会再次漂移。
    */
@@ -215,11 +215,17 @@ const links = [
       .forEach((m) => m.setAttribute('content', bg));
   }
 
-  function applyTheme(pref: ThemePref): void {
+  /**
+   * 应用主题。
+   *
+   * persist=false 只用于「跟随系统」的自动跟随：那时用户还没有显式选择，
+   * 不能把系统值写进 localStorage，否则下一次系统换色就不再跟随了。
+   */
+  function applyTheme(pref: ThemePref, persist = true): void {
     const root = document.documentElement;
     root.dataset.theme = pref;
-    localStorage.setItem('theme', pref);
-    root.classList.toggle('dark', isDark(pref));
+    if (persist) localStorage.setItem('theme', pref);
+    root.classList.toggle('dark', pref === 'dark');
     syncToggleLabel(pref);
     syncThemeColor();
   }
@@ -228,21 +234,21 @@ const links = [
   // 每次 initTheme 都 addEventListener 会越积越多
   let systemBound = false;
 
-  /** 主题切换：三态循环 light → dark → system，独立于搜索框初始化 */
+  /** 主题切换：两个状态来回翻，独立于搜索框初始化 */
   function initTheme() {
     const toggle = document.getElementById('theme-toggle');
     if (!toggle || toggle.dataset.inited) return;
     toggle.dataset.inited = 'true';
 
-    // 进入页面时先把无障碍标签与 theme-color 同步成真实偏好
-    // （显式偏好可能与系统相反，此时 media 分支给的颜色是错的）
+    // 进入页面时先把无障碍文本与 theme-color 同步成真实主题
+    // （显式偏好可能与系统相反，此时 meta 的 media 分支给的颜色是错的）
     syncToggleLabel(currentPref());
     syncThemeColor();
 
     toggle.addEventListener('click', () => {
-      const next =
-        THEME_ORDER[(THEME_ORDER.indexOf(currentPref()) + 1) % THEME_ORDER.length];
-      applyTheme(next);
+      // 翻的是「当前实际显示的那个」，不是存过的值——首次点击时还没有
+      // 存过值，但用户看到的是系统给的那个，点一下就该翻过去。
+      applyTheme(currentPref() === 'dark' ? 'light' : 'dark');
     });
 
     if (!systemBound) {
@@ -250,8 +256,8 @@ const links = [
       window
         .matchMedia('(prefers-color-scheme: dark)')
         .addEventListener('change', () => {
-          // 只有 system 模式才需要实时跟随；用户显式选过就不该被系统覆盖
-          if (currentPref() === 'system') applyTheme('system');
+          // 只有从未显式选择过才继续跟随系统；选过就不该被系统覆盖
+          if (!localStorage.getItem('theme')) applyTheme(systemPref(), false);
         });
     }
   }

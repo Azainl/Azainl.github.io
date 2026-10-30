@@ -32,7 +32,10 @@ import { Icon } from 'astro-icon/components';
 
     {/* 结果播报区：始终留在可访问性树中（.sr-only），因此不能用 hidden 切换。
         与页头下拉共用 announce() —— 两处都有播报，行为一致。 */}
-    <p class="sr-only" id="search-announce" aria-live="polite" aria-atomic="true"></p>
+    {/* id 必须与页头那个 #search-announce 区分开：页头是 transition:persist，
+        换页后仍在文档里，两个同 id 元素会让 getElementById 拿到页头那一个 ——
+        搜索结果就播报到了页面的隐藏区域而不是本页的播报区。 */}
+    <p class="sr-only" id="search-announce-page" aria-live="polite" aria-atomic="true"></p>
     <p id="search-meta" class="search-meta" hidden></p>
     <div id="search-loading" class="search-status">
       <p>正在载入文章索引……</p>
@@ -80,7 +83,7 @@ import { Icon } from 'astro-icon/components';
     const loading = document.getElementById('search-loading') as HTMLElement;
     const errorBox = document.getElementById('search-error') as HTMLElement;
     const results = document.getElementById('search-results') as HTMLOListElement;
-    const announceEl = document.getElementById('search-announce');
+    const announceEl = document.getElementById('search-announce-page');
 
     function render(items: ReturnType<typeof searchIndex>, query: string) {
       results.replaceChildren();

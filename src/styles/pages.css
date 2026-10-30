@@ -4,8 +4,9 @@
 
 /* ============================================================
    标签
-   标签是**元信息**，不是按钮：无衬线小字 + 细线方框，
-   全圆胶囊会让它看起来像可点的按钮，抢走标题的注意力。
+   标签是**元信息**，不是按钮：等宽小字 + 细软边框。
+   用 6px 方角而非全圆胶囊 —— 全圆会读成"按钮"，抢走标题注意力；
+   全直角又和这套软边语言打架。6px 是两者之间的中点。
    ============================================================ */
 .tag-list {
   list-style: none;
@@ -26,8 +27,10 @@
   /* 竖直内边距 0.15rem：13px 字号下总高约 28px ——
      再小会显得局促（实测 0.1rem 时仅 19px，像被压扁），
      再大就抢标题的注意力。标签是元信息，不是按钮。 */
-  padding: 0.15rem 0.5rem;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  padding: 0.2rem 0.6rem;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
 }
 
 .tag:hover {
@@ -46,10 +49,17 @@
 }
 
 .tag-cloud .tag {
-  padding: 0.3rem 0.7rem;
+  padding: 0.35rem 0.85rem;
   display: inline-flex;
   align-items: baseline;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  border-radius: var(--radius-pill);
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+/* 标签总览是「可点的一整片」，这里的标签才配得上胶囊形态 */
+.tag-cloud .tag:hover {
+  background: var(--bg-soft);
 }
 
 /* 标签计数：标签云与首页「按主题」两处共用同一套数字样式 */
@@ -72,17 +82,20 @@
 
 .back-link {
   display: inline-block;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.1rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink-2);
   font-size: var(--text-ui);
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .back-link:hover {
   color: var(--accent);
   border-color: var(--accent);
+  background: var(--bg-soft);
 }
 
 /* ============================================================
@@ -126,7 +139,7 @@ svg[data-icon] {
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -198,7 +211,7 @@ svg[data-icon] {
 mark {
   background: var(--mark-bg);
   color: var(--mark-ink);
-  border-radius: 2px;
+  border-radius: var(--radius-inline);
   padding: 0 0.15em;
 }
 
@@ -315,7 +328,11 @@ mark {
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-4);
-  padding: 0.3rem 0 0.3rem 0.7rem;
+  /* 系列条也是一块可点的区域，跟着全站软化的语言走：
+     极轻暖底 + 软拐角 + 左缘一根圆头竖线（不是硬直角方块）。 */
+  padding: 0.4rem 0.8rem;
+  background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+  border-radius: var(--radius);
   border-left: 2px solid var(--accent);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -395,19 +412,22 @@ mark {
   display: inline-flex;
   align-items: baseline;
   gap: 0.3rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.75rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-inline);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease,
+    background-color 0.15s ease;
 }
 .archive-year-link:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--bg-soft);
 }
 .archive-year-count {
   color: var(--ink-3);
@@ -456,7 +476,18 @@ mark {
   color: var(--ink-2);
 }
 
+/* 「← 返回首页」是全文最后一句，也是整篇文章的收束点：
+   单独成行、水平居中，并且上下留白相等。
+   此前它是整宽 block + 左对齐：墨迹贴死栏左缘、右侧空出 477px，
+   上方只隔 15px（紧贴修订行）、下方却有 67px —— 既没居中，也不对称，
+   读起来像"话没说完就断了"。
+   上边距 = --space-16 − --space-3（64 − 12 = 52），加上 .post-footer 的
+   --space-3 gap，净空正好等于 --space-16，也就等于 <article> 的下内边距。
+   写成令牌相减而不是 52px：下方留白的基准就是这个 --space-16，
+   一旦它改了，这里跟着自动对齐，不会退化成"上 52 下 64"的错位。 */
 .post-footer .back {
+  margin-top: calc(var(--space-16) - var(--space-3));
+  text-align: center;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--ink-3);
@@ -476,22 +507,23 @@ mark {
   align-items: center;
   gap: var(--space-1);
   min-height: 2.25rem;
-  padding: 0.35rem 0.8rem;
+  padding: 0.35rem 0.9rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink-2);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease, box-shadow 0.2s ease;
 }
 .post-action:hover,
 .post-action:focus-visible {
   border-color: var(--accent);
   color: var(--accent);
+  box-shadow: var(--shadow-card);
 }
 .post-action svg {
   width: 15px;
@@ -518,20 +550,26 @@ mark {
   gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
+/* 两张卡片是页面里少有的"独立纸片"，给它们一层几乎看不见的柔和投影，
+   让白卡从暖纸上浮起来 —— 这是"软"的主要来源，不靠粗边框。 */
 .post-nav-link {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-4) 1.15rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-card);
   text-decoration: none;
   color: var(--ink);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 .post-nav-link:hover {
   border-color: var(--accent);
+  box-shadow: var(--shadow-popover);
+  transform: translateY(-1px);
 }
 .post-nav-link.older {
   text-align: right;
@@ -555,8 +593,9 @@ mark {
   padding: var(--space-4) 1.15rem;
   border: 1px solid var(--line);
   border-left: 2px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 .post-series-nav-title {
   display: flex;
@@ -632,13 +671,15 @@ mark {
   justify-content: space-between;
   align-items: baseline;
   gap: var(--space-4);
-  padding: 0.8rem 0;
+  padding: 0.8rem 0.7rem;
+  border-radius: var(--radius-inline);
   text-decoration: none;
   color: var(--ink);
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .related-list a:hover {
   color: var(--accent);
+  background: var(--bg-soft);
 }
 .related-name {
   font-family: var(--font-serif);
@@ -783,23 +824,33 @@ mark {
 .prose blockquote {
   position: relative;
   margin: 1.8em 0;
-  padding: 0.15em 0 0.15em 1.35em;
+  padding: 0.9em 1.15em 0.9em 1.5em;
+  /* 引文读成"贴上去的一张便签"：极轻的暖底 + 软拐角，
+     比一条硬竖线更贴近这套纸墨语言。左缘仍留一根圆头细线做锚点。 */
+  background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+  border-radius: var(--radius-lg);
   color: var(--ink-2);
   font-family: var(--font-serif);
   font-size: 1.06em;
   line-height: 1.75;
 }
 
-/* 引文用中性细线，避免响亮红色侧边条（AI 套路感）；
+/* 深色下 --bg-soft 只比底色亮一点点（#241f18 vs #1a1611），
+   70% 透明度会把便签彻底抹平；改成不透明的 --surface，才看得见那块底。 */
+.dark .prose blockquote {
+  background: var(--surface);
+}
+
+/* 引文锚点用中性细线，避免响亮红色侧边条（AI 套路感）；
    用伪元素而非 border-left，保持主题化且不被反模式检测误伤 */
 .prose blockquote::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 0.2em;
-  bottom: 0.2em;
+  left: 0.6rem;
+  top: 0.95em;
+  bottom: 0.95em;
   width: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
 }
 
@@ -833,7 +884,8 @@ mark {
   padding: var(--space-4) 1.15rem;
   background: var(--code-bg);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  /* 代码块是正文里的一块"实体"，跟随插图用大一档 */
+  border-radius: var(--radius-lg);
   overflow-x: auto;
   font-size: 0.875rem;
   line-height: 1.75;
@@ -852,10 +904,17 @@ mark {
   margin: 2.5em 0;
 }
 
+/* 表格：外面看成一张"卡片"——整体一圈软边 + 内部只留行分隔线。
+   border-collapse: collapse 下 cell 的直角会顶破外层圆角，
+   所以改用 separate + border-spacing: 0，由表格自身管外框、行管内线。 */
 .prose table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1.5em 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   font-family: var(--font-sans);
   font-size: var(--text-ui);
 }
@@ -871,14 +930,21 @@ mark {
 
 .prose th,
 .prose td {
-  border: 1px solid var(--line);
-  padding: 0.5em 0.75em;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0.55em 0.85em;
   text-align: left;
   vertical-align: top;
 }
 
+/* 最后一行不再画内线，否则和外框的下边叠成双线 */
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+
 .prose th {
   background: var(--bg-soft);
+  border-bottom: 1px solid var(--line-strong);
   font-weight: 600;
 }
 
@@ -889,7 +955,8 @@ mark {
   max-width: 100%;
   height: auto;
   margin: 1.8em auto;
-  border-radius: var(--radius);
+  /* 插图是正文里最大的一块"实物"，用最大一档圆角 */
+  border-radius: var(--radius-lg);
 }
 
 /* 图片版权/题注：紧跟在 <p><img></p> 之后的斜体段落。
@@ -934,6 +1001,21 @@ mark {
   text-decoration: var(--shiki-dark-text-decoration);
 }
 
+/* 代码块底色统一成站内的暖纸色，而不是 Shiki 给的白/冷灰。
+   ------------------------------------------------------------
+   github-light 的外层底色是 #ffffff、github-dark 是 #24292e（偏冷蓝灰）。
+   在 #f7f1e4 的暖纸上，一块纯白代码区会像贴了张打印纸；深色同理发蓝。
+   做法：把 Shiki 写在每个 span 上的 background 全部置空，
+   只留外层容器的 --code-bg（本来就是暖调的），语法色不动。
+   必须带 !important —— Shiki 是行内样式，权重上压不过。 */
+.prose .astro-code,
+.prose .astro-code span {
+  background-color: transparent !important;
+}
+.prose .astro-code {
+  background-color: var(--code-bg) !important;
+}
+
 /* 切换暗色时，让代码块与页面背景同步淡入（body 是 0.25s，这里对齐） */
 .prose .astro-code,
 .prose .astro-code span,
@@ -955,6 +1037,16 @@ mark {
   gap: var(--space-1) var(--space-3);
   align-items: baseline;
   margin: 0.55em 0;
+  /* 一排订阅源读起来像清单，给每行一点软边：hover 时整行亮起来，
+     点击范围也从那个细长的 URL 扩到一整行。 */
+  padding: 0.15rem 0.55rem;
+  margin-left: -0.55rem;
+  border-radius: var(--radius-inline);
+  transition: background-color 0.15s ease;
+}
+
+.feed-list li:hover {
+  background: var(--bg-soft);
 }
 
 .feed-list li::marker {
@@ -1002,17 +1094,22 @@ mark {
 
 .footer-links {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-1);
   align-items: center;
 }
 
+/* 页脚仍是"安静区"：不加边框、不加底色块。
+   但鼠标落上去要给一点软边的回应——圆角 hover 底就是最小代价的那一点。 */
 .footer-links a {
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
   color: var(--ink-2);
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .footer-links a:hover {
   color: var(--accent);
+  background: var(--bg-soft);
 }
 
 /* 「随便看看」是动作而不是订阅入口：用虚线下划线暗示可点，
@@ -1094,7 +1191,7 @@ mark {
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -1117,7 +1214,7 @@ mark {
   color: var(--on-accent);
   background: var(--accent);
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: opacity 0.15s ease;
 }
@@ -1200,15 +1297,18 @@ mark {
 
 .not-found-pages a {
   display: inline-block;
-  padding: 0.55rem 1.1rem;
+  padding: 0.55rem 1.2rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink);
   font-weight: 550;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .not-found-pages a:hover {
   color: var(--accent);
   border-color: var(--accent);
+  background: var(--bg-soft);
 }

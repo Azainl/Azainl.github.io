@@ -288,6 +288,76 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 再次点击恢复深色`, r.after2 === true);
   check(`${label}: localStorage 同步`, r.stored1 === 'light' && r.stored2 === 'dark', `${r.stored1} -> ${r.stored2}`);
 }, '主题切换', { dark: true });
+// 两态语义：没有显式偏好时初始值跟随系统，但它不是一个可停留的第三态
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(() => {
+    const root = document.documentElement;
+    return {
+      theme: root.dataset.theme,
+      dark: root.classList.contains('dark'),
+      stored: localStorage.getItem('theme'),
+      label: document.getElementById('theme-toggle').getAttribute('aria-label'),
+    };
+  })()`);
+  check(`${label}: 无偏好时取系统深色`, r.theme === 'dark' && r.dark === true, r.theme);
+  check(`${label}: 跟随系统不写 localStorage`, r.stored === null, String(r.stored));
+  check(`${label}: 按钮预告下一个状态`, r.label === '切换到浅色主题', r.label);
+  // 从未选择过 → 系统换色应当继续跟随
+  await cdp.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-color-scheme', value: 'light' }],
+  });
+  await sleep(260);
+  const r2 = await evaluate(cdp, `(() => ({
+    theme: document.documentElement.dataset.theme,
+    dark: document.documentElement.classList.contains('dark'),
+    stored: localStorage.getItem('theme'),
+  }))()`);
+  check(`${label}: 未选择时跟随系统换色`, r2.theme === 'light' && r2.dark === false, r2.theme);
+  check(`${label}: 自动跟随仍不写 localStorage`, r2.stored === null, String(r2.stored));
+}, '主题-首屏跟随系统', { dark: true });
+await runPage(`${BASE}/`, async (cdp, label) => {
+  const r = await evaluate(cdp, `(async () => {
+    const btn = document.getElementById('theme-toggle');
+    const start = document.documentElement.dataset.theme;
+    btn.click();
+    await new Promise(r => setTimeout(r, 100));
+    return {
+      start,
+      theme: document.documentElement.dataset.theme,
+      dark: document.documentElement.classList.contains('dark'),
+      stored: localStorage.getItem('theme'),
+      label: btn.getAttribute('aria-label'),
+    };
+  })()`);
+  check(`${label}: 点击把深色翻成浅色`, r.start === 'dark' && r.theme === 'light' && r.dark === false, `${r.start} -> ${r.theme}`);
+  check(`${label}: 点击写入显式偏好`, r.stored === 'light', String(r.stored));
+  check(`${label}: 按钮预告回到深色`, r.label === '切换到深色主题', r.label);
+  // 已有显式偏好 → 系统换色不该覆盖用户的选择。
+  // 注意这里必须**绕一圈**：本用例起始系统就是 dark，直接切 dark 不产生
+  // change 事件，等于没测。先切到 light（有变化），再切回 dark（又有变化），
+  // 两跳都触发过监听还能保持 light，才说明偏好真的锁住了。
+  await cdp.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-color-scheme', value: 'light' }],
+  });
+  await sleep(260);
+  await cdp.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-color-scheme', value: 'dark' }],
+  });
+  await sleep(260);
+  const r2 = await evaluate(cdp, `(() => ({
+    theme: document.documentElement.dataset.theme,
+    dark: document.documentElement.classList.contains('dark'),
+    stored: localStorage.getItem('theme'),
+  }))()`);
+  check(
+    `${label}: 显式选择后不再跟随系统`,
+    r2.theme === 'light' && r2.dark === false && r2.stored === 'light',
+    `${r2.theme} / ${r2.stored}`,
+  );
+}, '主题-显式选择后锁定', { dark: true });
 await runPage(`${BASE}/`, (cdp, label) => baseChecks(cdp, label), '首页-移动端', { width: 390, height: 844 });
 
 // 首页标签与翻页
@@ -310,7 +380,10 @@ await runPage(`${BASE}/`, async (cdp, label) => {
   check(`${label}: 无嵌套链接`, r.nested === 0, `${r.nested} 个`);
   check(`${label}: 标签数量`, r.tagCount >= 8, `${r.tagCount} 个`);
   check(`${label}: 标签字号统一`, r.fontSize === '13px', r.fontSize);
-  check(`${label}: 标签高度正常`, r.padTop === '2.4px' && r.height < 30, `pad=${r.padTop} h=${r.height}`);
+  // 上内边距只守区间不守字面量：它是视觉调参（0.15rem→0.2rem 都合理），
+  // 真正要防的是标签被压扁成 19px 或胖成按钮。
+  const padTopPx = parseFloat(r.padTop);
+  check(`${label}: 标签高度正常`, padTopPx >= 2 && padTopPx <= 5 && r.height < 30, `pad=${r.padTop} h=${r.height}`);
   check(`${label}: 首页第 1 页文章数`, r.visibleRows === r.page1Count && r.page1Count > 0, `${r.visibleRows} 篇`);
   check(`${label}: 翻页控件显示`, r.navVisible);
 }, '首页标签与翻页');
@@ -3130,9 +3203,12 @@ await runPage(
         rightColor: cs.borderRightColor,
         width: Math.round(r.width),
         height: Math.round(r.height),
+        left: Math.round(r.left),
+        right: Math.round(r.right),
         wordmark: probe('.wordmark'),
         nav: probe('.site-nav'),
         toggle: probe('.theme-toggle'),
+        popover: probe('.search-popover'),
       };
     })()`;
     const closed = await evaluate(cdp, readState());
@@ -3176,6 +3252,26 @@ await runPage(
       `${label}: 打开时有宽度延展动画`,
       ok && focused.width - closed.width >= 40 && closed.height === focused.height,
       ok ? `closed=${closed.width}px focused=${focused.width}px` : '(null)',
+    );
+
+    // ②b 输入框与结果面板必须等宽、右缘同一条竖线。
+    //     起因：输入框 240px 顶着 460px 面板，右缘对齐却向左突出 220px，
+    //     读起来像"窄框顶上盖了块宽板"。宽度现由 --search-w 一处产出，
+    //     这里守的是"一处产出"这个事实 —— 两边同时改大改小都仍然通过，
+    //     只有两边写死成不同数字才会红。
+    const popW =
+      focused.popover ? focused.popover.right - focused.popover.left : null;
+    check(
+      `${label}: 结果面板与输入框等宽`,
+      ok && popW !== null && popW === focused.width,
+      ok ? `输入框=${focused.width}px 面板=${popW}px` : '(null)',
+    );
+    check(
+      `${label}: 结果面板右缘与输入框对齐`,
+      ok && focused.popover !== null && focused.popover.right === focused.right,
+      ok
+        ? `输入框右缘=${focused.right} 面板右缘=${focused.popover?.right}`
+        : '(null)',
     );
 
     // ③ 真正的"不抽动"判据：页头其余部分在开合两态不得位移。
@@ -3223,6 +3319,53 @@ await runPage(
   '搜索框开合一致',
 );
 
+// ---- 页头搜索宽度分档：窄视口不能把导航挤扁 ----
+// 起因：面板与输入框共用 --search-w（460px）。页头是 flex，输入框越宽，
+// 夹在刊头与动作区之间的 .site-nav 越窄 —— 700px 宽时只剩 154px 空隙。
+// 这里在四个宽度上量"导航右缘 → 动作区左缘"的空隙，要求始终 >= 90px
+// （导航文字本身 114px，空隙再小就贴上了），并顺带确认输入框仍是
+// "未聚焦一半、聚焦满宽"，即降档没有把延展动画抹掉。
+for (const w of [1024, 900, 820, 768, 700]) {
+  await runPage(
+    `${BASE}/`,
+    async (cdp, label) => {
+      const read = () => `(() => {
+        const q = (s) => document.querySelector(s);
+        const inp = q('.header-search-input');
+        if (!inp) return { error: 'no input' };
+        const r = inp.getBoundingClientRect();
+        const nav = q('.site-nav').getBoundingClientRect();
+        const act = q('.header-actions').getBoundingClientRect();
+        return {
+          idleW: Math.round(r.width),
+          gap: Math.round(act.left - nav.right),
+          varW: parseInt(getComputedStyle(q('.header-search')).getPropertyValue('--search-w'), 10),
+        };
+      })()`;
+      const idle = await evaluate(cdp, read());
+      await evaluate(cdp, "document.querySelector('.header-search-input').focus(); true");
+      await sleep(500);
+      const focused = await evaluate(cdp, read());
+      await evaluate(cdp, "document.querySelector('.header-search-input').blur(); true");
+      await sleep(300);
+
+      const ok = idle && focused && !idle.error && !focused.error;
+      check(
+        `${label}: 导航与搜索之间留出空隙`,
+        ok && idle.gap >= 90,
+        ok ? `空隙=${idle.gap}px（--search-w=${idle.varW}px）` : '(null)',
+      );
+      check(
+        `${label}: 聚焦仍延展到 --search-w`,
+        ok && focused.idleW === focused.varW && idle.idleW * 2 === idle.varW,
+        ok ? `未聚焦=${idle.idleW}px 聚焦=${focused.idleW}px 满宽=${idle.varW}px` : '(null)',
+      );
+    },
+    `${w}px 搜索档位`,
+    { width: w, height: 900 },
+  );
+}
+
 // ---- 关于页：题头与正文必须共用同一条左边缘 ----
 // 起因：about.astro 把两个**各自居中**的盒子上下叠放：
 //   .page-head  max-width: 58rem（--container-wide）
@@ -3263,6 +3406,128 @@ await runPage(
     check(`${label}: 无横向溢出`, !!r && !r.error && !r.overflow, String(r && r.overflow));
   },
   '关于页版式',
+);
+
+// ---- 首页收尾行：居中、上下留白一致 ----
+// 起因：colophon 原来是左对齐、上内边距 32px / 下 64px，整句贴在左边缘，
+// 上下也不对称，读起来像「没写完」。它是全页最后一句，居中有收束感。
+// 守两件事，不守像素值：文字行心 ≈ 容器行心（真居中）、上下内边距相等。
+await runPage(
+  `${BASE}/`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const p = document.querySelector('.colophon');
+        if (!p) return { error: 'missing' };
+        const cs = getComputedStyle(p);
+        const rect = p.getBoundingClientRect();
+        const rg = document.createRange();
+        rg.selectNodeContents(p);
+        const rects = [...rg.getClientRects()].filter((x) => x.width > 0);
+        if (rects.length === 0) return { error: 'no-text' };
+        const minL = Math.min(...rects.map((x) => x.left));
+        const maxR = Math.max(...rects.map((x) => x.right));
+        const textMid = (minL + maxR) / 2;
+        const boxMid = rect.left + rect.width / 2;
+        return {
+          textAlign: cs.textAlign,
+          midDelta: +(textMid - boxMid).toFixed(1),
+          padTop: parseFloat(cs.paddingTop),
+          padBottom: parseFloat(cs.paddingBottom),
+          textLeft: +minL.toFixed(1),
+          textRight: +maxR.toFixed(1),
+          boxLeft: +rect.left.toFixed(1),
+          boxRight: +rect.right.toFixed(1),
+        };
+      })()`,
+    );
+    check(
+      `${label}: 收尾行居中`,
+      !!r && !r.error && r.textAlign === 'center' && Math.abs(r.midDelta) <= 2,
+      r && !r.error ? `text-align=${r.textAlign} 行心偏差=${r.midDelta}px（文字 ${r.textLeft}~${r.textRight} / 容器 ${r.boxLeft}~${r.boxRight}）` : JSON.stringify(r),
+    );
+    check(
+      `${label}: 收尾行上下留白一致`,
+      !!r && !r.error && Math.abs(r.padTop - r.padBottom) <= 1,
+      r && !r.error ? `上=${r.padTop}px 下=${r.padBottom}px` : '(null)',
+    );
+  },
+  '首页收尾行',
+);
+
+// ---- 文章页收尾行：「← 返回首页」居中、上下留白相等 ----
+// 起因：这一行是全文最后一句，原本是整宽 block + 左对齐——墨迹贴死栏左缘
+// （右侧空出 477px），上方只隔 15px（紧贴修订行）、下方却是 67px，
+// 既没居中也不对称。它是文章的收束点，要和首页 colophon 用同一套语言。
+// 守三件事，不守像素：文字墨迹的中点 ≈ 版心中点、上下净空 ≈ 相等、
+// 窄屏不因居中而挤出横向滚动条。
+// 上下净空的基准取 --space-16（文章列的下内边距），不写死 64px：
+// 一旦 --space-16 改动，这条断言会跟着一起提醒。
+// 居中在四档宽度都要成立：窄屏版心被 --gutter 挤压，是这类"整宽 block
+// 改居中"最容易翻车的地方，所以逐档跑而不是只在 1440 上过一遍。
+for (const width of [390, 768, 1280, 1440]) await runPage(
+  `${BASE}/posts/blog-build-notes/`,
+  async (cdp, label) => {
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const f = document.querySelector('.post-footer');
+        const back = f && f.querySelector('.back');
+        if (!back) return { error: 'missing' };
+        const rg = document.createRange();
+        rg.selectNodeContents(back);
+        const rects = [...rg.getClientRects()].filter((x) => x.width > 0);
+        if (rects.length === 0) return { error: 'no-text' };
+        const inkL = Math.min(...rects.map((x) => x.left));
+        const inkR = Math.max(...rects.map((x) => x.right));
+        const inkTop = Math.min(...rects.map((x) => x.top));
+        const inkBottom = Math.max(...rects.map((x) => x.bottom));
+        const box = f.getBoundingClientRect();
+        // 上一个可见兄弟（修订行）的底边 = 上方净空的起点；
+        // 文章列的下内边距底边 = 下方净空的终点。两边都以"墨迹"计，
+        // 因为行盒的上下还留着半行 leading，用它算会凭空多出 2~3px。
+        const sibs = [...f.children].filter((el) => getComputedStyle(el).display !== 'none');
+        const prev = sibs[sibs.length - 2];
+        const padBottom = parseFloat(getComputedStyle(document.querySelector('article')).paddingBottom);
+        const inkMid = (inkL + inkR) / 2;
+        const boxMid = box.left + box.width / 2;
+        return {
+          textAlign: getComputedStyle(back).textAlign,
+          midDelta: +(inkMid - boxMid).toFixed(1),
+          // 上：修订行底边 → 墨迹；下：墨迹 → (footer 底边 + 文章列下内边距)
+          gapAbove: prev ? +(inkTop - prev.getBoundingClientRect().bottom).toFixed(1) : null,
+          gapBelow: +(box.bottom + padBottom - inkBottom).toFixed(1),
+          expected: padBottom,
+          boxLeft: +box.left.toFixed(1),
+          boxRight: +box.right.toFixed(1),
+          inkLeft: +inkL.toFixed(1),
+          inkRight: +inkR.toFixed(1),
+          viewport: innerWidth,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 收尾行居中`,
+      !!r && !r.error && r.textAlign === 'center' && Math.abs(r.midDelta) <= 2,
+      r && !r.error
+        ? `text-align=${r.textAlign} 行心偏差=${r.midDelta}px（墨迹 ${r.inkLeft}~${r.inkRight} / 版心 ${r.boxLeft}~${r.boxRight}）`
+        : JSON.stringify(r),
+    );
+    check(
+      `${label}: 收尾行上下留白相等`,
+      !!r && !r.error && r.gapAbove !== null && Math.abs(r.gapAbove - r.gapBelow) <= 2,
+      r && !r.error ? `上=${r.gapAbove}px 下=${r.gapBelow}px（下方基准 ${r.expected}px）` : '(null)',
+    );
+    check(
+      `${label}: 收尾行居中不引入横向溢出`,
+      !!r && !r.error && !r.overflow,
+      r && !r.error ? `视口=${r.viewport} overflow=${r.overflow}` : '(null)',
+    );
+  },
+  `文章页收尾行 @${width}`,
+  { width, height: 900 },
 );
 
 // ---- 文章页宽屏三列：正文始终居中、目录进右栏、正文两侧留白对称 ----
@@ -3655,6 +3920,74 @@ await runPage(
     );
   },
   '文章页抽屉-开时拉宽',
+);
+
+// ---- 抽屉打开时必须锁住背景滚动 ----
+// JS 一直会给 body 加 .toc-open，但它曾经没有任何样式：抽屉盖住正文，
+// 用户却还能把背后的页面滚走（实测 390 宽开抽屉后滚轮，y 0 → 500），
+// 关掉抽屉时人已经不在原处。修法是窄屏分支里 html:has(body.toc-open) 锁滚动，
+// 且只在窄屏生效 —— 宽屏没有抽屉，不能顺手把桌面滚动也锁了。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    const opened = await evaluate(
+      cdp,
+      `(() => {
+        const toggle = document.querySelector('.toc-toggle');
+        const rail = document.querySelector('.toc-rail');
+        toggle.click();
+        return {
+          open: rail.classList.contains('open'),
+          bodyClass: document.body.classList.contains('toc-open'),
+          htmlOverflow: getComputedStyle(document.documentElement).overflow,
+          y: Math.round(scrollY),
+        };
+      })()`,
+    );
+    // 真实滚轮：CDP 的 mouseWheel 才走浏览器默认滚动逻辑，脚本 scrollTo 会绕过锁
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: 40,
+      y: 400,
+      deltaX: 0,
+      deltaY: 600,
+    });
+    await sleep(700);
+    const whileOpen = await evaluate(cdp, `Math.round(scrollY)`);
+    await evaluate(cdp, `document.querySelector('.toc-toggle').click()`);
+    await sleep(400);
+    const closed = await evaluate(
+      cdp,
+      `({
+        open: document.querySelector('.toc-rail').classList.contains('open'),
+        bodyClass: document.body.classList.contains('toc-open'),
+        htmlOverflow: getComputedStyle(document.documentElement).overflow,
+      })`,
+    );
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: 200,
+      y: 400,
+      deltaX: 0,
+      deltaY: 600,
+    });
+    await sleep(700);
+    const afterClose = await evaluate(cdp, `Math.round(scrollY)`);
+    check(
+      `${label}: 抽屉打开时背景被锁住，关闭后恢复滚动`,
+      opened.open &&
+        opened.bodyClass &&
+        opened.htmlOverflow === 'hidden' &&
+        whileOpen === opened.y &&
+        !closed.open &&
+        !closed.bodyClass &&
+        closed.htmlOverflow !== 'hidden' &&
+        afterClose > whileOpen,
+      `开=${opened.open} body=${opened.bodyClass} html=${opened.htmlOverflow} 开着滚 ${opened.y}→${whileOpen} 关后 ${closed.htmlOverflow} 滚到 ${afterClose}`,
+    );
+  },
+  '文章页抽屉-锁定滚动',
+  { width: 390 },
 );
 
 // ---- 首页列表：标签在「上方文字」与「下方分割线」之间居中 ----
@@ -4144,6 +4477,91 @@ await runPage(
     );
   },
   '换页滚动-键盘翻页',
+);
+
+// ⑦b 平滑滚动动画正在飞行时换页，落点同样必须在顶部
+// 这条走的是第三条链路（见 src/scripts/scrollGuard.ts 注释 3）：点击那一刻页面上
+// 有平滑滚动在飞（这里用 scrollTo(0, scrollHeight) 启动它），换页时动画被 router 的
+// 归零打断，浏览器会在 astro:page-load **之后的一帧**把视口补回偏移量。
+// 实测未修复时 /posts/docs-for-strangers/ 滚到底再点页头品牌 → / y=104（104/160/160）。
+// 修复点只能在 page-load 之后钳制，所以这条专门守护那段代码。
+await runPage(
+  `${BASE}/posts/docs-for-strangers/`,
+  async (cdp, label) => {
+    const pos = await evaluate(
+      cdp,
+      `(async () => {
+        // html 上有 scroll-behavior: smooth，这一句启动的是动画而非瞬跳，
+        // 「动画与换页重叠」正是要复现的现场，不能改成 instant。
+        scrollTo(0, document.documentElement.scrollHeight);
+        await new Promise((r) => requestAnimationFrame(r));
+        const a = document.querySelector('.wordmark');
+        const b = a.getBoundingClientRect();
+        return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) };
+      })()`,
+    );
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: pos.x,
+        y: pos.y,
+        button: 'left',
+        clickCount: 1,
+      });
+    }
+    await sleep(2600);
+    const after = await evaluate(
+      cdp,
+      `({ path: location.pathname, y: Math.round(scrollY), maxY: Math.round(document.documentElement.scrollHeight - innerHeight) })`,
+    );
+    check(
+      `${label}: 平滑滚动飞行中点页头品牌，落在首页顶部`,
+      after.path === '/' && after.y <= 4,
+      `目标 ${after.path} y=${after.y}/${after.maxY}`,
+    );
+  },
+  '换页滚动-飞行中换页',
+);
+
+// ⑦c 上面的钳制不能误伤「返回上一页」：traverse 要还原历史滚动位置
+// 与 ⑦b 是同一套代码的两面：钳制条件必须放过 navigationType === 'traverse',
+// 否则用户滚到文章中间按后退，回来会被强行拉到顶部。
+await runPage(
+  `${BASE}/posts/docs-for-strangers/`,
+  async (cdp, label) => {
+    await evaluate(cdp, `window.scrollTo({ top: 900, behavior: 'instant' })`);
+    await sleep(200);
+    const pos = await evaluate(
+      cdp,
+      `(() => {
+        const a = document.querySelector('.wordmark');
+        const b = a.getBoundingClientRect();
+        return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) };
+      })()`,
+    );
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: pos.x,
+        y: pos.y,
+        button: 'left',
+        clickCount: 1,
+      });
+    }
+    await sleep(2500);
+    await evaluate(cdp, `history.back()`);
+    await sleep(2500);
+    const back = await evaluate(
+      cdp,
+      `({ path: location.pathname, y: Math.round(scrollY) })`,
+    );
+    check(
+      `${label}: 后退回文章页还原滚动位置（钳制不误伤 traverse）`,
+      back.path === '/posts/docs-for-strangers/' && back.y >= 860,
+      `${back.path} y=${back.y}（期望 ≥860，离开时 900）`,
+    );
+  },
+  '换页滚动-返回还原',
 );
 
 // ⑧ 清单拉取失败：退回归档页

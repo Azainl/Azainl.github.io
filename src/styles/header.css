@@ -78,14 +78,16 @@
 }
 
 /* 当前页用一条**纸下的细线**标出，而不是高亮块：
-   少一层背景色，页头就不必靠色块维持层级。 */
+   少一层背景色，页头就不必靠色块维持层级。
+   线做成 2px 圆头，跟全站的软拐角同一个语言。 */
 .site-nav a::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -0.1rem;
-  height: 1px;
+  bottom: -0.18rem;
+  height: 2px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   transform: scaleX(0);
   transform-origin: left;
@@ -112,7 +114,7 @@
   padding: 0.3rem 0.6rem;
   margin: 0 0 1.25rem -0.6rem;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink-2);
   font-family: var(--font-mono);
@@ -134,14 +136,20 @@
   transform: translateY(1px);
 }
 
-/* 页头搜索框：**保留打开时的延展动画，只把未打开时的底色钉住**。
+/* 页头搜索框：**输入框与结果面板必须等宽**。
    ------------------------------------------------------------
-   这里要分开看两件事 —— 动画与底色：
+   面板是输入框的延伸，不是另开的窗口。以前输入框 240px、面板 460px，
+   面板向右对齐输入框右缘、却向左突出 220px —— 读起来像「窄框顶上盖了块
+   宽板」。现在两者共用 --search-w：宽度同值、右缘同一条竖线。
 
-   1. 动画（保持原样）：未打开 180px、聚焦 240px，配 0.2s 的 width 过渡；
-      描边由「仅下边一条 --line 线」在聚焦时被 border-color 一次性
-      点亮四边，再叠一层光晕。点开时输入框向左延展、一条线长成盒子 ——
-      这是页头唯一一处"活"的动作。
+   1. 动画保留：未聚焦 --search-w 的一半（纸片大小），聚焦延展到 --search-w；
+      描边由「仅下边一条 --line 线」在聚焦时被 border-color 一次性点亮四边，
+      再叠一层光晕。点开时输入框向左长、一条线长成盒子。
+
+   2. --search-w 分档下降，不是固定 460px：页头是 flex，输入框越宽，
+      .site-nav 被挤压越狠。下面三档按实测的「导航右缘 → 页头动作区左缘」
+      空隙定的，每一档都在对应断点留出安全余量。改这里必须回头量一次
+      700 / 820 / 1024 / 1440 四个宽度的间隙。
 
    2. 底色（唯一改动）：原写法未打开时是 transparent，聚焦才变成
       var(--surface) 纸面。实测两态 computed 不一致：
@@ -155,6 +163,8 @@
    而不是取消动画。 */
 .header-search {
   position: relative;
+  /* 输入框与面板的共用宽度。默认值给宽屏；窄一点在下方 @media 里降档。 */
+  --search-w: 460px;
 }
 
 .header-search-icon {
@@ -168,8 +178,8 @@
 }
 
 .header-search-input {
-  /* 未打开的宽度；聚焦时向左延展到 240px（见下方 :focus） */
-  width: 180px;
+  /* 未聚焦只占一半，聚焦时向左延展到满宽 --search-w（见下方 :focus）。 */
+  width: calc(var(--search-w) / 2);
   padding: 0.35rem 0.6rem 0.35rem 1.9rem;
   font-family: inherit;
   font-size: var(--text-ui);
@@ -181,7 +191,7 @@
      一次性点亮四边，于是"一条线"长成"一个盒子"（不产生布局位移）。 */
   border: 1px solid transparent;
   border-bottom: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   /* background-color 现已两态同值，列在这里只为与原始过渡清单保持一致 */
   transition: border-color 0.15s ease, box-shadow 0.15s ease,
     background-color 0.15s ease, width 0.2s ease;
@@ -194,7 +204,7 @@
 .header-search-input:focus {
   outline: none;
   /* 焦点反馈 = 宽度延展 + 四边描边点亮 + 光晕 */
-  width: 240px;
+  width: var(--search-w);
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
@@ -208,12 +218,12 @@
   position: absolute;
   top: calc(100% + var(--space-2));
   right: 0;
-  /* 面板现在同时承担"搜索结果"与"页面跳转"，320px 放不下带提示文字的条目 */
-  width: 460px;
+  /* 与输入框等宽、右缘对齐：面板是输入框的延伸，宽度跟着 --search-w 走 */
+  width: var(--search-w);
   max-width: calc(100vw - 2rem);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-popover);
   overflow: hidden;
   display: none;
@@ -308,6 +318,27 @@
   background: var(--bg-soft);
 }
 
+/* 结果面板宽度分档：页头是 flex，输入框越宽，.site-nav 被挤得越紧。
+   460px 在 1024 以上留 400px+ 空隙；往下每降一档同步收窄，
+   保证「站点名 + 导航 + 搜索 + 主题键」始终排在一行里。 */
+@media (max-width: 1024px) {
+  .header-search {
+    --search-w: 380px;
+  }
+}
+
+@media (max-width: 820px) {
+  .header-search {
+    --search-w: 320px;
+  }
+}
+
+@media (max-width: 700px) {
+  .header-search {
+    --search-w: 260px;
+  }
+}
+
 @media (max-width: 640px) {
   .header-search {
     display: none;
@@ -320,7 +351,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-pill);
     color: var(--ink);
     font-size: 1.05rem;
     transition: color 0.15s ease, border-color 0.15s ease;
@@ -352,7 +383,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink-2);
   font-size: 1.05rem;
@@ -379,24 +410,15 @@
   transform: rotate(90deg);
 }
 
-/* 主题按钮图标跟随「用户偏好」（light / dark / system），而不是当前实际明暗：
-   否则 system 状态下显示太阳/月亮会和它代表的语义对不上 */
+/* 图标显示的是「当前生效的主题」：深色时月亮、浅色时太阳。
+   只剩两个状态，所以不需要 monitor 兜底了。 */
 .theme-toggle .icon-sun,
 .theme-toggle .icon-moon {
   display: none;
 }
-.theme-toggle .icon-monitor {
-  display: inline-block;
-}
 html[data-theme='light'] .theme-toggle .icon-sun {
   display: inline-block;
 }
-html[data-theme='light'] .theme-toggle .icon-monitor {
-  display: none;
-}
 html[data-theme='dark'] .theme-toggle .icon-moon {
   display: inline-block;
-}
-html[data-theme='dark'] .theme-toggle .icon-monitor {
-  display: none;
 }

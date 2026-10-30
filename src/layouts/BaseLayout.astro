@@ -106,27 +106,30 @@ const ogImageUrl = new URL(url(ogImage), Astro.site).href;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
-    {/* theme-color 必须与 --bg 同源：此前写死 #f7f7f4/#131315，
-        而 --bg 早已换成暖纸 #f2ede1 / 暖黑 #16140f —— 移动端地址栏
-        与页面底色因此对不上（地址栏偏冷白）。这里直接引用同一个令牌，
-        并在下面用 JS 处理"用户三态偏好"（media 只认系统偏好）。 */}
-    <meta name="theme-color" content="#f2ede1" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#16140f" media="(prefers-color-scheme: dark)" />
+    {/* theme-color 必须与 --bg 同源（暖纸 #f7f1e4 / 暖黑 #1a1611）：
+        两处 media 分支只认**系统**偏好，用户显式选过之后主题可能与系统相反，
+        那时 media 分支给出的就是错的颜色 —— 所以下面还有一段 JS 读 --bg
+        回写 meta。静态值负责无 JS 与首帧，JS 负责运行时的真值。 */}
+    <meta name="theme-color" content="#f7f1e4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1611" media="(prefers-color-scheme: dark)" />
     <ClientRouter />
     <script is:inline>
       // 首屏同步执行，避免主题闪烁（FOUC）。
-      // 偏好三态：light / dark / system，未选择过则默认 system（跟随系统）。
+      // 主题只有 light / dark 两个状态；没存过显式偏好时，初始值取系统偏好
+      // （默认跟随系统，但它不是一个可停留的第三态）。这段必须与
+      // Header.astro 里的 currentPref()/systemPref() 保持一致。
       (() => {
         const root = document.documentElement;
         root.classList.add('js');
         const saved = localStorage.getItem('theme');
-        const pref = saved === 'light' || saved === 'dark' ? saved : 'system';
+        const pref =
+          saved === 'light' || saved === 'dark'
+            ? saved
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
         root.dataset.theme = pref;
-        const dark =
-          pref === 'dark' ||
-          (pref === 'system' &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) root.classList.add('dark');
+        if (pref === 'dark') root.classList.add('dark');
 
         // 兜底：`.js .reveal` 把未渐显的内容设为 opacity:0，而真正让它们显示的是
         // reveal 模块——那是外部 JS，弱网或脚本被拦截时可能永远加载不到，正文

@@ -132,9 +132,16 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--rule);
-  transition: color 0.15s ease;
+  padding: var(--space-2) 0.75rem;
+  margin: 0 -0.75rem;
+  /* 圆角 + 下边线同时存在时会画出一个"半截框"：线是直的、角是圆的。
+     既然已经有 hover 底色作为点击反馈，下边线就不再需要。 */
+  border-radius: var(--radius);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.trail-list a:hover {
+  background: var(--bg-soft);
 }
 
 .trail-name {
@@ -160,16 +167,18 @@
   padding: 0 var(--gutter);
   font-size: var(--text-ui);
 }
-/* 版权行：一行收尾。报头已经说过这个站是什么，这里不再重复自我介绍，
-   只给两条真正有用的出口。 */
+/* 收尾行：全页最后一句，居中收束。
+   横线仍占满容器（它是这一段的顶边，不是文字的一部分），只有文字居中。
+   上下内边距必须相等——原来上是 32px、下是 64px，文字看着被顶到上半格。 */
 .colophon {
   max-width: var(--container-wide);
   margin: 0 auto;
-  padding: var(--space-8) var(--gutter) var(--space-16);
+  padding: var(--space-12) var(--gutter);
   border-top: 1px solid var(--rule);
   color: var(--ink-3);
   font-size: var(--text-sm);
   line-height: 1.9;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
@@ -353,16 +362,19 @@
 }
 
 .page-btn {
-  padding: 0.4rem 0.8rem;
+  padding: 0.4rem 0.95rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   color: var(--ink-2);
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .page-btn:hover:not([aria-disabled="true"]) {
   color: var(--accent);
   border-color: var(--accent);
+  background: var(--bg-soft);
 }
 
 .page-btn[aria-disabled="true"] {
@@ -385,7 +397,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   transition: color 0.15s ease, border-color 0.15s ease,
