@@ -1,0 +1,31 @@
+# 统一行尾为 LF。
+#
+# 背景：这个仓库没有 .gitattributes，core.autocrlf 也未设置。在 Windows 上
+# 用某些编辑器/工具改过文件后，工作区会变成 CRLF 而索引里是 LF。git 因为
+# stat 缓存会暂时把它们报成 clean，一旦 mtime 变化就爆成整文件 diff
+# （实测 scripts/check.mjs 4856 行、pages.css 1325 行全部重写）。
+# 这会让 review 无法进行，也会掩盖真正的改动。
+#
+# 加了这个文件后：
+#   - 仓库内所有文本文件一律以 LF 存储，跨平台一致；
+#   - 检出到 Windows 时也保持 LF（eol=lf），不再随 core.autocrlf 漂移；
+#   - git add 时会自动把工作区的 CRLF 规范化成 LF。
+#
+# 二进制文件不参与换行转换。
+* text=auto eol=lf
+
+# 明确的二进制类型（避免被当作文本做 EOL 转换或 diff）
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.avif binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
+*.pdf  binary
+
+# lockfile 是机器生成的，不参与 diff 显示噪音
+package-lock.json -diff linguist-generated
