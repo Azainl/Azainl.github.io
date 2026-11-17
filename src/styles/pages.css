@@ -824,15 +824,26 @@ mark {
 .prose blockquote {
   position: relative;
   margin: 1.8em 0;
+  /* 左右不对称是故意的：左边多出的那截给 `::before` 的竖线让位
+     （线在 0.6rem，宽 2px；文字从 1.5em 起，距线约 17px），
+     右边 1.15em 才是纯粹的呼吸。改成对称反而会让左边显空。 */
   padding: 0.9em 1.15em 0.9em 1.5em;
   /* 引文读成"贴上去的一张便签"：极轻的暖底 + 软拐角，
-     比一条硬竖线更贴近这套纸墨语言。左缘仍留一根圆头细线做锚点。 */
+     比一条硬竖线更贴近这套纸墨语言。 */
   background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
   border-radius: var(--radius-lg);
   color: var(--ink-2);
   font-family: var(--font-serif);
   font-size: 1.06em;
   line-height: 1.75;
+}
+
+/* 引文里的段落必须去掉下外边距，否则上下留白不相等。
+   .prose p 带 `margin-bottom: 1.3em`（约 24.8px），而 margin-top 是 0：
+   实测 1440 宽下上方 25.75px、下方 50.55px，墨迹整体上浮 12.4px。
+   引文块里段落之间本来也不需要那段间距（多段时由 padding 与行高自然分开）。 */
+.prose blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 /* 深色下 --bg-soft 只比底色亮一点点（#241f18 vs #1a1611），

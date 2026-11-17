@@ -135,10 +135,14 @@
   html:has(body.toc-open) {
     overflow: hidden;
   }
+  /* 抽屉里不能把 .toc 的 padding-left 清零。
+     桌面版靠这条 1rem 让出进度线的位置（见下面 .toc / .toc-progress），
+     窄屏砍成 0 之后，进度线（left:0）和首条目次的文字起点就重合了：
+     实测 390 宽下两者都在 x=88.3，红线正好压在字上。 */
   .toc-rail .toc {
     border: none;
     background: transparent;
-    padding: 0;
+    padding: 0 0 0 1rem;
   }
   /* 窄屏下上一篇/下一篇纵向堆叠、方向统一 */
   .post-nav {

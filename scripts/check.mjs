@@ -264,11 +264,53 @@ await runPage(`${BASE}/posts/blog-build-notes/`, async (cdp, label) => {
   check(`${label}: 表格渲染`, r.tables >= 1, `${r.tables} 个`);
   check(`${label}: 段落数量`, r.pCount >= 4, `${r.pCount} 段`);
 }, '文章页');
+// 引文块里守纵向的两件事，横向不管（引文保持左对齐，不做水平居中）。
+// 曾经的真实 bug：.prose p 带 margin-bottom: 1.3em 而 margin-top 是 0，
+// 引文里的 <p> 继承了下外边距 → 实测 1440 宽下上方留白 25.75px、
+// 下方 50.55px，墨迹整体上浮 12.4px。修法是给 :last-child 去掉下外边距。
+// 所以这里守：上下留白相等、墨迹垂直中点对齐容器中点。
+// 另外守一条横向的间接约束——竖线是 ::before 绝对定位在 0.6rem，
+// 文字从 padding-left 起；左内边距一旦被改成和右边对称，线就会贴字。
 await runPage(`${BASE}/posts/why-i-write/`, async (cdp, label) => {
-  const r = await evaluate(cdp, `(() => ({
-    blockquotes: document.querySelectorAll('.prose blockquote').length,
-  }))()`);
+  const r = await evaluate(cdp, `(() => {
+    const bqs = [...document.querySelectorAll('.prose blockquote')];
+    return {
+      blockquotes: bqs.length,
+      detail: bqs.map((bq) => {
+        const cs = getComputedStyle(bq);
+        const box = bq.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(bq);
+        const rects = [...range.getClientRects()];
+        if (!rects.length) return { empty: true };
+        const inkTop = Math.min(...rects.map((x) => x.top));
+        const inkBottom = Math.max(...rects.map((x) => x.bottom));
+        return {
+          gapAbove: inkTop - box.top,
+          gapBelow: box.bottom - inkBottom,
+          midDeltaV: (inkTop + inkBottom) / 2 - (box.top + box.bottom) / 2,
+        };
+      }),
+    };
+  })()`);
   check(`${label}: 引用渲染`, r.blockquotes >= 1, `${r.blockquotes} 个`);
+  const ok = r.detail.filter((d) => !d.empty);
+  const badV = ok.filter((d) => Math.abs(d.gapAbove - d.gapBelow) > 1);
+  const badMid = ok.filter((d) => Math.abs(d.midDeltaV) > 1);
+  check(
+    `${label}: 引文上下留白相等`,
+    ok.length > 0 && badV.length === 0,
+    badV.length
+      ? `${badV.length} 块不等（上=${badV[0].gapAbove.toFixed(1)}px 下=${badV[0].gapBelow.toFixed(1)}px）`
+      : `${ok.length} 块全部相等（${ok[0]?.gapAbove.toFixed(1)}px）`,
+  );
+  check(
+    `${label}: 引文墨迹垂直居中`,
+    ok.length > 0 && badMid.length === 0,
+    badMid.length
+      ? `${badMid.length} 块偏差 ${badMid.map((d) => d.midDeltaV.toFixed(1)).join(',')}px`
+      : `${ok.length} 块偏差 0`,
+  );
 }, '引用页面');
 await runPage(`${BASE}/`, async (cdp, label) => {
   const r = await evaluate(cdp, `(async () => {
@@ -3987,6 +4029,60 @@ await runPage(
     );
   },
   '文章页抽屉-锁定滚动',
+  { width: 390 },
+);
+
+// ---- 抽屉里的目录不能压进度线 ----
+// 桌面版靠 .toc 的 padding-left:1rem 给 .toc-progress（绝对定位 left:0）让位。
+// 窄屏分支一度把这条内边距砍成 0，于是进度线（x=88.3）和首条目次的文字
+// （同为 x=88.3）重合，2px 的红线正好切在字上。这里量的是"文字墨迹左缘
+// 与线的右缘"的距离，不是元素盒距离 —— 链接是整宽块，盒左缘贴着线也照样
+// 可能是正常的（文字居中/内缩），只有墨迹才是用户看得见的那部分。
+await runPage(
+  `${BASE}${WIDE_POST}`,
+  async (cdp, label) => {
+    await evaluate(cdp, `document.querySelector('.toc-toggle').click()`);
+    await sleep(700);
+    const r = await evaluate(
+      cdp,
+      `(() => {
+        const rail = document.querySelector('.toc-rail');
+        if (!rail.classList.contains('open')) return { open: false };
+        const prog = document.querySelector('.toc-progress');
+        const items = [...document.querySelectorAll('.toc-rail .toc-list a')];
+        const progRect = prog.getBoundingClientRect();
+        const ink = (el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const rects = [...range.getClientRects()];
+          return rects.length ? Math.min(...rects.map((x) => x.left)) : null;
+        };
+        const gaps = items
+          .map((a) => {
+            const l = ink(a);
+            return l === null ? null : l - progRect.right;
+          })
+          .filter((v) => v !== null);
+        const toc = document.querySelector('.toc-rail .toc');
+        return {
+          open: true,
+          items: items.length,
+          progLeft: progRect.left,
+          progRight: progRect.right,
+          tocPadLeft: parseFloat(getComputedStyle(toc).paddingLeft),
+          minGap: gaps.length ? Math.min(...gaps) : null,
+        };
+      })()`,
+    );
+    check(
+      `${label}: 目录文字不被进度线压住`,
+      r.open && r.minGap !== null && r.minGap >= 6,
+      r.open
+        ? `${r.items} 条，最小净距 ${r.minGap === null ? 'n/a' : r.minGap.toFixed(1) + 'px'}（线右 ${r.progRight.toFixed(1)}，toc 左内边距 ${r.tocPadLeft}）`
+        : '抽屉没打开',
+    );
+  },
+  '文章页抽屉-目录不被压',
   { width: 390 },
 );
 
