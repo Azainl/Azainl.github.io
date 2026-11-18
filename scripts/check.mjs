@@ -202,12 +202,19 @@ async function runPage(
     media: 'screen',
     features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }],
   });
-  await cdp.send('Page.navigate', { url });
-  await sleep(1200);
-  // 清掉上一个用例残留的主题偏好，保证每个页面按系统偏好走
-  await cdp.send('Runtime.evaluate', {
-    expression: `localStorage.clear(); location.reload();`,
+  // 先清掉上个用例残留的主题偏好，再首次导航。
+  //
+  // 旧写法是「导航 → 等 1.2s → localStorage.clear() + reload → 再等 1.2s」，
+  // 每次 runPage 多付一次完整页面加载（62 次 ≈ 75s）。但 reload 的唯一目的是
+  // 让「显式主题偏好」不残留 —— 而 runPage 每次都新开标签页，只要在**首次导航前**
+  // 注入一段 clear 脚本，页面一开始就是干净的，reload 就多余了。
+  //
+  // 用 addScriptToEvaluateOnNewDocument 而不是直接 evaluate：新标签页是
+  // about:blank，没有目标 origin 的 localStorage 可清，必须等导航后执行。
+  await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: 'try { localStorage.clear() } catch {}',
   });
+  await cdp.send('Page.navigate', { url });
   await sleep(1200);
   try {
     await fn(cdp, label);
