@@ -40,4 +40,9 @@ export const OG_SLUGS: string[] = [
   'find-the-middle-line',
   'break-it-to-check-it',
   'scroll-to-the-bottom',
+  'eraser-and-deletion',
+  'map-is-direction',
+  'waiting-is-work',
+  'whiteboard-disappears',
+  'keys-dont-adapt',
 ];

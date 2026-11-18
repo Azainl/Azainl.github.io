@@ -2060,20 +2060,29 @@ for (const path of ['/about/', '/search/']) {
 {
   const postsDir = join(ROOT, 'src/content/posts');
   const revised = []; // { slug, date, updated }
-  let latest = ''; // 全站最新 lastModified —— 含未修订文章，它们取 date
+  // 已发布文章里最新的 lastModified —— 含未修订文章，它们取 date。
+  // 必须与 RSS 实际内容同口径：feed 只含已发布文章，所以「全站最新」也只能统计已发布的。
+  // 否则仓库里一旦有定时发布的未来文章，源文件的 date 会比 feed 里任何日期都大，断言假红。
+  let latest = '';
+  const bjDay2 = (v) => new Date(new Date(v).getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  const bjToday2 = bjDay2(new Date());
   for (const f of readdirSync(postsDir)) {
     if (!f.endsWith('.md')) continue;
     const src = readFileSync(join(postsDir, f), 'utf8');
     const get = (k) => (new RegExp('^' + k + '\\s*:\\s*["\']?([^"\'\\n]+)', 'm').exec(src) || [])[1];
     const date = (get('date') || '').trim();
     const updated = (get('updated') || '').trim();
+    const draft = (get('draft') || '').trim();
+    // 与 getPublishedPosts() 同口径：草稿与北京日历日未到的不出现在 feed 里
+    if (!date || draft.toLowerCase() === 'true' || bjDay2(date) > bjToday2) continue;
     // 与 src/utils/posts.ts 的 lastModified() 同口径：updated 严格更新才生效
     const modified = updated && updated > date ? updated : date;
     if (modified > latest) latest = modified;
     // 只把「真的修订过」的文章放进 revised，供逐项对拍
-    if (!date || !updated || !(updated > date)) continue;
+    if (!updated || !(updated > date)) continue;
     revised.push({ slug: f.replace(/\.md$/, ''), date, updated });
   }
+
 
   check('T-29 有文章启用了 updated', revised.length >= 3, `${revised.length} 篇：${revised.map((r) => r.slug).join(', ')}`);
 
@@ -2390,12 +2399,18 @@ for (const path of ['/about/', '/search/']) {
   const searchIndex = await (await fetch(BASE + '/search.json')).json();
   const postSlugs = searchIndex.map((p) => p.slug).sort();
   const manifest = [...slugs].sort();
+  // 清单允许**多于**已发布文章：npm run og 会为全部源文件（含未来日期 / 草稿）
+  // 预生成图，这样文章到点上线时分享卡片已经就绪，不必再手动跑一次。
+  // 因此断言只守两件事，且两件都是「真会坏用户」的：
+  //   ① 每篇已发布文章都必须有对应图 —— 缺了 = 分享卡片退化成通用图；
+  //   ② 清单里每个 slug 都必须有真实 png（下面那条断言）。
+  // 不守「清单不能多」—— 多出来的正是定时发布要用的预生成图。
   const missing = postSlugs.filter((s) => !manifest.includes(s));
   const extra = manifest.filter((s) => !postSlugs.includes(s));
   check(
-    'OG 清单与文章集合一致（漏跑 npm run og 会在这里暴露）',
-    missing.length === 0 && extra.length === 0 && manifest.length > 0,
-    '文章=' + postSlugs.length + ' 清单=' + manifest.length + ' 缺=' + (missing.slice(0, 3).join(',') || '无') + ' 多=' + (extra.slice(0, 3).join(',') || '无'),
+    'OG 清单覆盖每篇已发布文章（漏跑 npm run og 会在这里暴露）',
+    missing.length === 0 && manifest.length > 0,
+    '已发布=' + postSlugs.length + ' 清单=' + manifest.length + ' 缺=' + (missing.slice(0, 3).join(',') || '无') + ' 预生成=' + extra.length + ' 篇' + (extra.slice(0, 3).join(',') ? '(' + extra.slice(0, 3).join(',') + ')' : ''),
   );
   // 清单里每一个 slug 都必须真有对应文件，否则 ogImagePath 会给出 404 链接
   const fs = await import('node:fs');
@@ -2431,11 +2446,33 @@ for (const path of ['/about/', '/search/']) {
     offenders.length === 0,
     offenders.slice(0, 3).join(',') || '仅 ' + publicFiles.filter((p) => IMG.test(p)).length + ' 个白名单文件',
   );
-  // 构建产物里也不应出现未压缩的 jpg/gif —— Astro 会把 src/assets 的图转成 webp
+  // 构建产物里也不应出现未压缩的 jpg/gif —— Astro 会把 src/assets 的图转成 webp。
+  //
+  // 例外（不是缺陷，是定时发布的必然结果）：只被**未发布文章**引用的图不会被任何页面
+  // 渲染，Astro 因此走了「未引用资源直接复制」的分支，把源文件原样搬进 dist/_astro。
+  // 等文章到点上线，同一次构建就会把这些图重新走优化管线输出 webp。
+  // 所以这里判定的口径是：**被已发布页面实际引用**的图有没有以原始格式出现。
+  // 只看 dist 里是否存在 jpg 会把「还没轮到发布的图」误判为「有人绕过管线」。
   const distImgs = walk(join(ROOT, 'dist'))
     .map((p) => p.slice(ROOT.length + 1).replace(/\\/g, '/'))
     .filter((p) => /\.(jpe?g|gif)$/i.test(p));
-  check('构建产物无未压缩 jpg/gif', distImgs.length === 0, distImgs.slice(0, 3).join(',') || '0 个');
+  // 已发布 HTML 里是否引用了这些原始图：引用了才是真问题（页面直出未优化图）
+  const referenced = new Set();
+  for (const htmlPath of walk(join(ROOT, 'dist')).filter((p) => p.endsWith('.html'))) {
+    const html = readFileSync(htmlPath, 'utf8');
+    for (const img of distImgs) {
+      const name = img.split('/').pop();
+      if (html.includes(name)) referenced.add(img);
+    }
+  }
+  const realOffenders = [...referenced];
+  check(
+    '构建产物无被页面直接引用的未压缩 jpg/gif',
+    realOffenders.length === 0,
+    realOffenders.length
+      ? realOffenders.slice(0, 3).join(',')
+      : '0 个' + (distImgs.length ? `（另有 ${distImgs.length} 个未被引用，属未发布文章的源图副本）` : ''),
+  );
 }
 
 // ③ 归档页总阅读时长：必须等于逐篇 readingTime 之和，不能是平均值估算。
@@ -2458,8 +2495,20 @@ for (const path of ['/about/', '/search/']) {
   })();
 
   const postsDir = join(ROOT, 'src', 'content', 'posts');
+  // 重算必须与 getPublishedPosts() 同口径：排除 draft 与「北京日历日未到」的文章，
+  // 否则只要仓库里存在定时发布的未来文章，页面（已过滤）与重算（未过滤）就会不等，
+  // 断言假红。口径独立实现（不 import release.ts），实现写错时测试不跟着错。
+  const bjDay = (v) => new Date(new Date(v).getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  const bjToday = bjDay(new Date());
   const calc = readdirSync(postsDir)
     .filter((f) => f.endsWith('.md'))
+    .filter((f) => {
+      const raw = readFileSync(join(postsDir, f), 'utf8');
+      const date = (/^date:\s*["']?([^"'\n]+)/m.exec(raw) || [])[1]?.trim();
+      const draft = (/^draft:\s*["']?([^"'\n]+)/m.exec(raw) || [])[1]?.trim();
+      if (!date || draft?.toLowerCase() === 'true') return false;
+      return bjDay(date) <= bjToday;
+    })
     .reduce((n, f) => {
       const raw = readFileSync(join(postsDir, f), 'utf8');
       const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
